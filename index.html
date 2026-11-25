@@ -1,0 +1,369 @@
+```html
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WORKOUT LOG | 筋トレ記録＆ワークアウトトラッカー</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS (xlsx) CDN for Excel Export & Import -->
+  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- Google Fonts: Inter, Noto Sans JP, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ==========================================================================
+       ベースデザイン＆カラートークン
+       背景: #0b0f19 / カード: #131b2e / サブパネル: #0b0f19 / ボーダー: #23304a
+       アクセント: エメラルド #10b981 / アンバー #f59e0b / スカイ #38bdf8 / 停止・削除 #ef4444
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      font-family: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+    .font-mono-num {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .app-card {
+      background-color: #131b2e;
+      border-color: #23304a;
+    }
+    .app-subcard {
+      background-color: #0b0f19;
+      border-color: #23304a;
+    }
+    /* セレクトボックスのカスタム矢印 */
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1.15rem;
+    }
+    /* date / datetime-local インプットのダークテーマ調整 */
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      opacity: 0.75;
+      cursor: pointer;
+    }
+    /* PR記録更新バッジの光彩アニメーション */
+    @keyframes prGlow {
+      0%, 100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+      50% { box-shadow: 0 0 24px rgba(245, 158, 11, 0.75); }
+    }
+    .pr-badge-glow {
+      animation: prGlow 2.2s infinite ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#0b0f19] text-slate-100 selection:bg-[#10b981] selection:text-slate-950">
+
+  <!-- =========================================================
+       共通ヘッダーナビゲーション（最大幅 640px 中央寄せ）
+       ========================================================= -->
+  <header class="sticky top-0 z-30 bg-[#0b0f19]/95 backdrop-blur-md border-b border-[#23304a]">
+    <div class="w-full max-w-[640px] mx-auto px-4 h-14 flex items-center justify-between gap-2">
+      <button id="headerLogoBtn" type="button" class="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer">
+        <div class="w-8 h-8 rounded-xl bg-[#10b981] flex items-center justify-center shadow-lg shadow-emerald-500/20 group-active:scale-95 transition">
+          <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.5 6.5v11M17.5 6.5v11M3 9v6M21 9v6M6.5 12h11" />
+          </svg>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="font-extrabold tracking-tight text-base sm:text-lg text-white">WORKOUT <span class="text-[#10b981]">LOG</span></span>
+        </div>
+      </button>
+
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#10b981] bg-[#131b2e] border border-[#23304a] px-2.5 py-1 rounded-full">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+          自動保存
+        </span>
+        <button id="resetAllDataBtn" type="button" class="min-h-[34px] px-3 py-1.5 rounded-xl bg-[#ef4444]/15 hover:bg-[#ef4444] border border-[#ef4444]/50 text-[#ef4444] hover:text-white font-bold text-xs transition cursor-pointer">
+          データ初期化
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================
+       メインコンテナ（最大幅 640px 中央寄せ・片手操作最適化）
+       ========================================================= -->
+  <main class="flex-1 w-full max-w-[640px] mx-auto px-4 py-5 pb-24">
+
+    <!-- *********************************************************
+         VIEW 1: ホーム画面（homeView）
+         ********************************************************* -->
+    <section id="homeView" style="display: block;" class="space-y-5 animate-fade-in">
+
+      <!-- 進行中ワークアウト再開バナー（activeSession が存在するとき表示） -->
+      <div id="resumeBanner" style="display: none;" class="hidden rounded-2xl bg-[#131b2e] border-2 border-[#f59e0b]/70 p-4 shadow-lg">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2 text-[#f59e0b] font-extrabold text-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              進行中のワークアウトがあります
+            </div>
+            <p id="resumeBannerDetail" class="text-xs text-slate-300 mt-1">前回の入力データが自動保存されています。</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="discardDraftBtn" type="button" class="min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#ef4444] hover:bg-red-500 transition cursor-pointer">
+              破棄
+            </button>
+            <button id="resumeWorkoutBtn" type="button" class="min-h-[42px] px-4 py-2 rounded-xl text-xs font-extrabold text-slate-950 bg-[#f59e0b] hover:bg-amber-400 shadow-md transition cursor-pointer">
+              進行中のワークアウトを再開する →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ワークアウト開始 CTA カード -->
+      <div class="rounded-3xl app-card border p-5 shadow-xl relative overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+          <div>
+            <p class="text-[11px] font-extrabold uppercase tracking-wider text-[#10b981]">DASHBOARD</p>
+            <h1 class="text-xl font-extrabold text-white mt-0.5">今日のトレーニングを記録</h1>
+            <p id="homeSummaryLine" class="text-xs text-slate-400 mt-1">累計ワークアウト: 0回 / 記録種目: 0種目</p>
+          </div>
+          <button id="startWorkoutBtn" type="button" class="w-full sm:w-auto min-h-[56px] px-6 py-3.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-extrabold text-base shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>ワークアウト開始</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- BIG3 ＋ 懸垂 クイックカード（2x2 グリッド） -->
+      <div>
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#10b981]"></span>
+            主要4種目（BIG3 ＋ 懸垂）
+          </h2>
+          <span class="text-[11px] text-slate-400">タップで履歴を展開</span>
+        </div>
+        <div id="big4Grid" class="grid grid-cols-2 gap-3">
+          <!-- JSで2x2カードを動的生成 -->
+        </div>
+      </div>
+
+      <!-- 種目別記録一覧セクション（検索・フィルター・展開対応） -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 shadow-lg">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#38bdf8]"></span>
+            種目別記録一覧
+          </h2>
+          <div class="relative w-full sm:w-52">
+            <input id="homeExerciseFilterInput" type="text" placeholder="種目名で絞り込み検索..." class="w-full bg-[#0b0f19] border border-[#23304a] rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#38bdf8]" />
+            <svg class="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+          </div>
+        </div>
+
+        <div id="exerciseStatsList" class="space-y-2.5">
+          <!-- JSで全種目の統計アコーディオンを描画 -->
+        </div>
+      </div>
+
+      <!-- 過去のワークアウト履歴（セッション別） -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 shadow-lg">
+        <div class="flex items-center justify-between gap-2 mb-3.5">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#f59e0b]"></span>
+            ワークアウト履歴
+          </h2>
+          <span id="sessionCountBadge" class="text-xs font-bold text-slate-300 bg-[#0b0f19] border border-[#23304a] px-2.5 py-1 rounded-full">0件</span>
+        </div>
+
+        <div id="workoutHistoryList" class="space-y-3">
+          <!-- JSでセッション一覧を描画 -->
+        </div>
+      </div>
+
+      <!-- データ出力・引き継ぎ（Excel）セクション -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 shadow-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#10b981]"></span>
+            データ出力・引き継ぎ（Excel）
+          </h2>
+          <span class="text-[11px] text-slate-400">localStorage自動保存</span>
+        </div>
+
+        <p class="text-xs text-slate-400 leading-relaxed">
+          記録データのExcel（<code class="text-[#10b981]">.xlsx</code>）書き出し、期間や種目を絞った範囲指定出力、および出力済みExcelファイルからのデータ引き継ぎが行えます。
+        </p>
+
+        <div class="grid grid-cols-1 gap-2.5">
+          <!-- 1. 全データExcel出力 -->
+          <button id="exportAllExcelBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-[0.99] text-slate-950 font-extrabold text-sm shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>📊</span>
+            <span>全データExcel出力 (.xlsx)</span>
+          </button>
+
+          <!-- 2. 範囲指定でExcel出力 -->
+          <button id="openRangeExportModalBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-[0.99] text-slate-950 font-extrabold text-sm shadow-md shadow-sky-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>📅</span>
+            <span>範囲指定でExcel出力 (.xlsx)</span>
+          </button>
+
+          <!-- 3. Excelデータインポート（引き継ぎ） -->
+          <button id="openExcelImportModalBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#0b0f19] hover:bg-slate-900 active:scale-[0.99] border-2 border-[#38bdf8]/60 text-[#38bdf8] font-extrabold text-sm flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>📥</span>
+            <span>Excelデータインポート（引き継ぎ）</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- *********************************************************
+         VIEW 2: ワークアウト記録画面（workoutView）
+         ********************************************************* -->
+    <section id="workoutView" style="display: none;" class="hidden space-y-4 animate-fade-in">
+
+      <!-- 0. 記録画面トップバー（「← 戻る」ボタン＋ステータス表示） -->
+      <div class="flex items-center justify-between gap-2 pt-0.5">
+        <button id="workoutBackBtn" type="button" class="min-h-[44px] px-4 py-2 rounded-2xl bg-[#131b2e] hover:bg-slate-800 active:scale-95 border border-[#23304a] hover:border-[#38bdf8]/60 text-slate-100 font-extrabold text-sm shadow-md flex items-center gap-1.5 transition cursor-pointer">
+          <span class="text-base leading-none text-[#38bdf8]">←</span>
+          <span>戻る</span>
+        </button>
+
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 text-[11px] font-extrabold tracking-wider uppercase text-[#38bdf8] bg-[#131b2e] border border-[#23304a] px-3 py-1.5 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
+            ワークアウト記録中
+          </span>
+        </div>
+      </div>
+
+      <!-- 1. インターバル用ストップウォッチ（MM:SS / 開始・繰り返し・停止の3ボタンのみ） -->
+      <div class="sticky top-14 z-20 rounded-3xl app-card border p-4 shadow-2xl">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#38bdf8]">
+              <span id="timerDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+              INTERVAL TIMER
+            </div>
+            <div id="stopwatchDisplay" class="font-mono-num text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-0.5">
+              00:00
+            </div>
+          </div>
+
+          <!-- 厳密に3ボタンのみ: 開始・繰り返し・停止 -->
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <button id="swStartBtn" type="button" class="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer">
+              開始
+            </button>
+            <button id="swRepeatBtn" type="button" class="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-95 text-slate-950 font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer" title="即座に00:00へリセットして計測再スタート">
+              繰り返し
+            </button>
+            <button id="swStopBtn" type="button" class="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-2xl bg-[#ef4444] hover:bg-red-400 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer">
+              停止
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. セッション情報（日時・場所）セットアップカード（確定後はワークアウト終了まで非表示） -->
+      <div id="sessionSetupCard" class="rounded-3xl app-card border p-4 sm:p-5 space-y-3.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-extrabold text-white flex items-center gap-2">
+            <span>📍</span> セッション情報（日時・場所）
+          </h2>
+          <button id="refreshLocationBtn" type="button" class="text-xs font-bold text-[#38bdf8] hover:text-sky-300 bg-[#0b0f19] border border-[#23304a] px-2.5 py-1.5 rounded-xl transition cursor-pointer">
+            現在地から再取得
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="workoutDateTimeInput" class="block text-xs font-bold text-slate-300 mb-1">実施日時</label>
+            <input id="workoutDateTimeInput" type="datetime-local" class="w-full min-h-[46px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8]" />
+          </div>
+
+          <div>
+            <label for="gymNameInput" class="block text-xs font-bold text-slate-300 mb-1">
+              トレーニング場所 <span id="geoStatusText" class="text-[11px] font-normal text-[#38bdf8] ml-1"></span>
+            </label>
+            <input id="gymNameInput" type="text" placeholder="ジム・施設名（任意入力可）" class="w-full min-h-[46px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#38bdf8]" />
+          </div>
+        </div>
+
+        <!-- 位置情報候補・過去のジム候補チップ -->
+        <div id="gymSuggestionsContainer" style="display: none;" class="hidden flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span class="text-[11px] text-slate-400 mr-1">候補:</span>
+          <div id="gymSuggestionsList" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- 確定して非表示ボタン -->
+        <div class="pt-1">
+          <button id="confirmLocationBtn" type="button" class="w-full min-h-[48px] rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-[0.99] text-slate-950 font-extrabold text-sm shadow-md flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>✓</span>
+            <span>日時・場所を確定して非表示にする</span>
+          </button>
+          <p class="text-[11px] text-slate-400 text-center mt-1.5">※確定後、または最初のセット追加後はワークアウト終了まで非表示になります</p>
+        </div>
+      </div>
+
+      <!-- 本日すでに記録済みの種目サマリーバッジ -->
+      <div id="completedTodayCard" style="display: none;" class="hidden rounded-2xl bg-[#131b2e] border border-[#10b981]/50 p-3.5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-extrabold text-[#10b981] flex items-center gap-1.5">
+            <span>✅</span> 本日の記録済み種目（<span id="completedTodayCount">0</span>種目）
+          </span>
+        </div>
+        <div id="completedTodayChips" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <!-- 3. 種目入力（90種目以上の予測変換＋手動入力）＆ 過去記録リファレンス表示 -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 space-y-4 shadow-lg">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="exerciseNameInput" class="text-sm font-extrabold text-white flex items-center gap-2">
+              <span>🏋️</span> 種目を選択・入力
+            </label>
+            <button id="clearExerciseInputBtn" type="button" class="text-xs font-bold text-slate-300 hover:text-white px-2.5 py-1 rounded-lg bg-[#0b0f19] border border-[#23304a] cursor-pointer">
+              クリア
+            </button>
+          </div>
+
+          <div class="relative">
+            <input id="exerciseNameInput" type="text" autocomplete="off" placeholder="例：ベンチプレス、スクワット、懸垂..." class="w-full min-h-[50px] bg-[#0b0f19] border-2 border-[#23304a] focus:border-[#38bdf8] rounded-2xl px-4 py-2.5 text-base font-bold text-white placeholder-slate-500 focus:outline-none transition" />
+
+            <!-- 予測変換ドロップダウンリスト -->
+            <div id="exerciseAutocompleteDropdown" style="display: none;" class="hidden absolute left-0 right-0 top-full mt-1.5 max-h-60 overflow-y-auto rounded-2xl bg-[#131b2e] border border-[#23304a] shadow-2xl z-30 divide-y divide-[#23304a]">
+              <!-- JSで候補描画 -->
+            </div>
+          </div>
+
+          <!-- 定番クイック選択ボタン -->
+          <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
+            <span class="text-[11px] text-slate-400">定番:</span>
+            <button type="button" data-quick-ex="ベンチプレス" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer">ベンチプレス</button>
+            <button type="button" data-quick-ex="スクワット" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 bo

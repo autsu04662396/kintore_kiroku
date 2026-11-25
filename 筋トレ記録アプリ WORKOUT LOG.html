@@ -1,0 +1,3322 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WORKOUT LOG | 筋トレ記録＆ワークアウトトラッカー</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS (xlsx) CDN for Excel Export & Import -->
+  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- Google Fonts: Inter, Noto Sans JP, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ==========================================================================
+       ベースデザイン＆カラートークン
+       背景: #0b0f19 / カード: #131b2e / サブパネル: #0b0f19 / ボーダー: #23304a
+       アクセント: エメラルド #10b981 / アンバー #f59e0b / スカイ #38bdf8 / 停止・削除 #ef4444
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      font-family: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+    .font-mono-num {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .app-card {
+      background-color: #131b2e;
+      border-color: #23304a;
+    }
+    .app-subcard {
+      background-color: #0b0f19;
+      border-color: #23304a;
+    }
+    /* セレクトボックスのカスタム矢印 */
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.75rem center;
+      background-size: 1.15rem;
+    }
+    /* date / datetime-local インプットのダークテーマ調整 */
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      opacity: 0.75;
+      cursor: pointer;
+    }
+    /* PR記録更新バッジの光彩アニメーション */
+    @keyframes prGlow {
+      0%, 100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+      50% { box-shadow: 0 0 24px rgba(245, 158, 11, 0.75); }
+    }
+    .pr-badge-glow {
+      animation: prGlow 2.2s infinite ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#0b0f19] text-slate-100 selection:bg-[#10b981] selection:text-slate-950">
+
+  <!-- =========================================================
+       共通ヘッダーナビゲーション（最大幅 640px 中央寄せ）
+       ========================================================= -->
+  <header class="sticky top-0 z-30 bg-[#0b0f19]/95 backdrop-blur-md border-b border-[#23304a]">
+    <div class="w-full max-w-[640px] mx-auto px-4 h-14 flex items-center justify-between gap-2">
+      <button id="headerLogoBtn" type="button" class="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer">
+        <div class="w-8 h-8 rounded-xl bg-[#10b981] flex items-center justify-center shadow-lg shadow-emerald-500/20 group-active:scale-95 transition">
+          <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.5 6.5v11M17.5 6.5v11M3 9v6M21 9v6M6.5 12h11" />
+          </svg>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="font-extrabold tracking-tight text-base sm:text-lg text-white">WORKOUT <span class="text-[#10b981]">LOG</span></span>
+        </div>
+      </button>
+
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#10b981] bg-[#131b2e] border border-[#23304a] px-2.5 py-1 rounded-full">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+          自動保存
+        </span>
+        <button id="resetAllDataBtn" type="button" class="min-h-[34px] px-3 py-1.5 rounded-xl bg-[#ef4444]/15 hover:bg-[#ef4444] border border-[#ef4444]/50 text-[#ef4444] hover:text-white font-bold text-xs transition cursor-pointer">
+          データ初期化
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================
+       メインコンテナ（最大幅 640px 中央寄せ・片手操作最適化）
+       ========================================================= -->
+  <main class="flex-1 w-full max-w-[640px] mx-auto px-4 py-5 pb-24">
+
+    <!-- *********************************************************
+         VIEW 1: ホーム画面（homeView）
+         ********************************************************* -->
+    <section id="homeView" style="display: block;" class="space-y-5 animate-fade-in">
+
+      <!-- 進行中ワークアウト再開バナー（activeSession が存在するとき表示） -->
+      <div id="resumeBanner" style="display: none;" class="hidden rounded-2xl bg-[#131b2e] border-2 border-[#f59e0b]/70 p-4 shadow-lg">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2 text-[#f59e0b] font-extrabold text-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              進行中のワークアウトがあります
+            </div>
+            <p id="resumeBannerDetail" class="text-xs text-slate-300 mt-1">前回の入力データが自動保存されています。</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="discardDraftBtn" type="button" class="min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#ef4444] hover:bg-red-500 transition cursor-pointer">
+              破棄
+            </button>
+            <button id="resumeWorkoutBtn" type="button" class="min-h-[42px] px-4 py-2 rounded-xl text-xs font-extrabold text-slate-950 bg-[#f59e0b] hover:bg-amber-400 shadow-md transition cursor-pointer">
+              進行中のワークアウトを再開する →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ワークアウト開始 CTA カード -->
+      <div class="rounded-3xl app-card border p-5 shadow-xl relative overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+          <div>
+            <p class="text-[11px] font-extrabold uppercase tracking-wider text-[#10b981]">DASHBOARD</p>
+            <h1 class="text-xl font-extrabold text-white mt-0.5">今日のトレーニングを記録</h1>
+            <p id="homeSummaryLine" class="text-xs text-slate-400 mt-1">累計ワークアウト: 0回 / 記録種目: 0種目</p>
+          </div>
+          <button id="startWorkoutBtn" type="button" class="w-full sm:w-auto min-h-[56px] px-6 py-3.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-extrabold text-base shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>ワークアウト開始</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- BIG3 ＋ 懸垂 クイックカード（2x2 グリッド） -->
+      <div>
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#10b981]"></span>
+            主要4種目（BIG3 ＋ 懸垂）
+          </h2>
+          <span class="text-[11px] text-slate-400">タップで履歴を展開</span>
+        </div>
+        <div id="big4Grid" class="grid grid-cols-2 gap-3">
+          <!-- JSで2x2カードを動的生成 -->
+        </div>
+      </div>
+
+      <!-- 種目別記録一覧セクション（検索・フィルター・展開対応） -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 shadow-lg">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#38bdf8]"></span>
+            種目別記録一覧
+          </h2>
+          <div class="relative w-full sm:w-52">
+            <input id="homeExerciseFilterInput" type="text" placeholder="種目名で絞り込み検索..." class="w-full bg-[#0b0f19] border border-[#23304a] rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-[#38bdf8]" />
+            <svg class="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+            </svg>
+          </div>
+        </div>
+
+        <div id="exerciseStatsList" class="space-y-2.5">
+          <!-- JSで全種目の統計アコーディオンを描画 -->
+        </div>
+      </div>
+
+      <!-- 過去のワークアウト履歴（セッション別） -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 shadow-lg">
+        <div class="flex items-center justify-between gap-2 mb-3.5">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#f59e0b]"></span>
+            ワークアウト履歴
+          </h2>
+          <span id="sessionCountBadge" class="text-xs font-bold text-slate-300 bg-[#0b0f19] border border-[#23304a] px-2.5 py-1 rounded-full">0件</span>
+        </div>
+
+        <div id="workoutHistoryList" class="space-y-3">
+          <!-- JSでセッション一覧を描画 -->
+        </div>
+      </div>
+
+      <!-- データ出力・引き継ぎ（Excel）セクション -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 shadow-lg space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span class="w-1.5 h-5 rounded-full bg-[#10b981]"></span>
+            データ出力・引き継ぎ（Excel）
+          </h2>
+          <span class="text-[11px] text-slate-400">localStorage自動保存</span>
+        </div>
+
+        <p class="text-xs text-slate-400 leading-relaxed">
+          記録データのExcel（<code class="text-[#10b981]">.xlsx</code>）書き出し、期間や種目を絞った範囲指定出力、および出力済みExcelファイルからのデータ引き継ぎが行えます。
+        </p>
+
+        <div class="grid grid-cols-1 gap-2.5">
+          <!-- 1. 全データExcel出力 -->
+          <button id="exportAllExcelBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-[0.99] text-slate-950 font-extrabold text-sm shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>📊</span>
+            <span>全データExcel出力 (.xlsx)</span>
+          </button>
+
+          <!-- 2. 範囲指定でExcel出力 -->
+          <button id="openRangeExportModalBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-[0.99] text-slate-950 font-extrabold text-sm shadow-md shadow-sky-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>📅</span>
+            <span>範囲指定でExcel出力 (.xlsx)</span>
+          </button>
+
+          <!-- 3. Excelデータインポート（引き継ぎ） -->
+          <button id="openExcelImportModalBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#0b0f19] hover:bg-slate-900 active:scale-[0.99] border-2 border-[#38bdf8]/60 text-[#38bdf8] font-extrabold text-sm flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>📥</span>
+            <span>Excelデータインポート（引き継ぎ）</span>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- *********************************************************
+         VIEW 2: ワークアウト記録画面（workoutView）
+         ********************************************************* -->
+    <section id="workoutView" style="display: none;" class="hidden space-y-4 animate-fade-in">
+
+      <!-- 0. 記録画面トップバー（「← 戻る」ボタン＋ステータス表示） -->
+      <div class="flex items-center justify-between gap-2 pt-0.5">
+        <button id="workoutBackBtn" type="button" class="min-h-[44px] px-4 py-2 rounded-2xl bg-[#131b2e] hover:bg-slate-800 active:scale-95 border border-[#23304a] hover:border-[#38bdf8]/60 text-slate-100 font-extrabold text-sm shadow-md flex items-center gap-1.5 transition cursor-pointer">
+          <span class="text-base leading-none text-[#38bdf8]">←</span>
+          <span>戻る</span>
+        </button>
+
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 text-[11px] font-extrabold tracking-wider uppercase text-[#38bdf8] bg-[#131b2e] border border-[#23304a] px-3 py-1.5 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
+            ワークアウト記録中
+          </span>
+        </div>
+      </div>
+
+      <!-- 1. インターバル用ストップウォッチ（MM:SS / 開始・繰り返し・停止の3ボタンのみ） -->
+      <div class="sticky top-14 z-20 rounded-3xl app-card border p-4 shadow-2xl">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-[#38bdf8]">
+              <span id="timerDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+              INTERVAL TIMER
+            </div>
+            <div id="stopwatchDisplay" class="font-mono-num text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-0.5">
+              00:00
+            </div>
+          </div>
+
+          <!-- 厳密に3ボタンのみ: 開始・繰り返し・停止 -->
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <button id="swStartBtn" type="button" class="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer">
+              開始
+            </button>
+            <button id="swRepeatBtn" type="button" class="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-95 text-slate-950 font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer" title="即座に00:00へリセットして計測再スタート">
+              繰り返し
+            </button>
+            <button id="swStopBtn" type="button" class="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-2xl bg-[#ef4444] hover:bg-red-400 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer">
+              停止
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. セッション情報（日時・場所）セットアップカード（確定後はワークアウト終了まで非表示） -->
+      <div id="sessionSetupCard" class="rounded-3xl app-card border p-4 sm:p-5 space-y-3.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-extrabold text-white flex items-center gap-2">
+            <span>📍</span> セッション情報（日時・場所）
+          </h2>
+          <button id="refreshLocationBtn" type="button" class="text-xs font-bold text-[#38bdf8] hover:text-sky-300 bg-[#0b0f19] border border-[#23304a] px-2.5 py-1.5 rounded-xl transition cursor-pointer">
+            現在地から再取得
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="workoutDateTimeInput" class="block text-xs font-bold text-slate-300 mb-1">実施日時</label>
+            <input id="workoutDateTimeInput" type="datetime-local" class="w-full min-h-[46px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#38bdf8]" />
+          </div>
+
+          <div>
+            <label for="gymNameInput" class="block text-xs font-bold text-slate-300 mb-1">
+              トレーニング場所 <span id="geoStatusText" class="text-[11px] font-normal text-[#38bdf8] ml-1"></span>
+            </label>
+            <input id="gymNameInput" type="text" placeholder="ジム・施設名（任意入力可）" class="w-full min-h-[46px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#38bdf8]" />
+          </div>
+        </div>
+
+        <!-- 位置情報候補・過去のジム候補チップ -->
+        <div id="gymSuggestionsContainer" style="display: none;" class="hidden flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span class="text-[11px] text-slate-400 mr-1">候補:</span>
+          <div id="gymSuggestionsList" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- 確定して非表示ボタン -->
+        <div class="pt-1">
+          <button id="confirmLocationBtn" type="button" class="w-full min-h-[48px] rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-[0.99] text-slate-950 font-extrabold text-sm shadow-md flex items-center justify-center gap-2 transition cursor-pointer">
+            <span>✓</span>
+            <span>日時・場所を確定して非表示にする</span>
+          </button>
+          <p class="text-[11px] text-slate-400 text-center mt-1.5">※確定後、または最初のセット追加後はワークアウト終了まで非表示になります</p>
+        </div>
+      </div>
+
+      <!-- 本日すでに記録済みの種目サマリーバッジ -->
+      <div id="completedTodayCard" style="display: none;" class="hidden rounded-2xl bg-[#131b2e] border border-[#10b981]/50 p-3.5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-extrabold text-[#10b981] flex items-center gap-1.5">
+            <span>✅</span> 本日の記録済み種目（<span id="completedTodayCount">0</span>種目）
+          </span>
+        </div>
+        <div id="completedTodayChips" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <!-- 3. 種目入力（90種目以上の予測変換＋手動入力）＆ 過去記録リファレンス表示 -->
+      <div class="rounded-3xl app-card border p-4 sm:p-5 space-y-4 shadow-lg">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="exerciseNameInput" class="text-sm font-extrabold text-white flex items-center gap-2">
+              <span>🏋️</span> 種目を選択・入力
+            </label>
+            <button id="clearExerciseInputBtn" type="button" class="text-xs font-bold text-slate-300 hover:text-white px-2.5 py-1 rounded-lg bg-[#0b0f19] border border-[#23304a] cursor-pointer">
+              クリア
+            </button>
+          </div>
+
+          <div class="relative">
+            <input id="exerciseNameInput" type="text" autocomplete="off" placeholder="例：ベンチプレス、スクワット、懸垂..." class="w-full min-h-[50px] bg-[#0b0f19] border-2 border-[#23304a] focus:border-[#38bdf8] rounded-2xl px-4 py-2.5 text-base font-bold text-white placeholder-slate-500 focus:outline-none transition" />
+
+            <!-- 予測変換ドロップダウンリスト -->
+            <div id="exerciseAutocompleteDropdown" style="display: none;" class="hidden absolute left-0 right-0 top-full mt-1.5 max-h-60 overflow-y-auto rounded-2xl bg-[#131b2e] border border-[#23304a] shadow-2xl z-30 divide-y divide-[#23304a]">
+              <!-- JSで候補描画 -->
+            </div>
+          </div>
+
+          <!-- 定番クイック選択ボタン -->
+          <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
+            <span class="text-[11px] text-slate-400">定番:</span>
+            <button type="button" data-quick-ex="ベンチプレス" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer">ベンチプレス</button>
+            <button type="button" data-quick-ex="スクワット" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer">スクワット</button>
+            <button type="button" data-quick-ex="デットリフト" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer">デットリフト</button>
+            <button type="button" data-quick-ex="懸垂（チンニング）" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer">懸垂</button>
+            <button type="button" data-quick-ex="ラットプルダウン" class="quick-ex-btn text-xs font-semibold bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer">ラットプル</button>
+          </div>
+        </div>
+
+        <!-- 過去記録リファレンス表示（これまでの最大重量 ＋ 前回 ＋ 前々回） -->
+        <div id="previousRecordsPanel" class="rounded-2xl app-subcard border p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-extrabold text-[#38bdf8] flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              自己ベスト・前回・前々回の記録
+            </span>
+            <span class="text-[11px] text-slate-400">タップで重量・回数へコピー</span>
+          </div>
+          <div id="previousRecordsContent" class="text-xs text-slate-400">
+            種目を選択または入力すると、これまでの最大重量・前回・前々回の記録がここに表示されます。
+          </div>
+        </div>
+
+        <!-- 4. 重量（2.5kg刻み 0〜500kg）・回数（0〜100回）プルダウン入力 -->
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <div>
+            <label for="weightSelect" class="block text-xs font-extrabold text-slate-300 mb-1.5">重量 (2.5kg刻み)</label>
+            <select id="weightSelect" class="w-full min-h-[52px] bg-[#0b0f19] border border-[#23304a] focus:border-[#38bdf8] rounded-2xl px-3.5 py-2.5 font-mono-num text-lg font-extrabold text-white focus:outline-none">
+              <!-- JSで 0kg 〜 500kg まで 2.5kg 刻みで生成 -->
+            </select>
+          </div>
+          <div>
+            <label for="repsSelect" class="block text-xs font-extrabold text-slate-300 mb-1.5">回数 (0〜100回)</label>
+            <select id="repsSelect" class="w-full min-h-[52px] bg-[#0b0f19] border border-[#23304a] focus:border-[#38bdf8] rounded-2xl px-3.5 py-2.5 font-mono-num text-lg font-extrabold text-white focus:outline-none">
+              <!-- JSで 0回 〜 100回 まで生成 -->
+            </select>
+          </div>
+        </div>
+
+        <!-- セット追加ボタン -->
+        <button id="addSetBtn" type="button" class="w-full min-h-[52px] rounded-2xl bg-[#38bdf8] hover:bg-sky-300 active:scale-[0.99] text-slate-950 font-extrabold text-base shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>セットを追加</span>
+        </button>
+
+        <!-- 現在の種目の記録済みセット一覧 -->
+        <div class="pt-1">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-extrabold text-slate-300">
+              現在の種目のセット一覧（<span id="currentSetCount">0</span>セット）
+            </h3>
+            <span id="currentExerciseMaxPreview" class="text-xs font-mono-num text-[#10b981] font-extrabold"></span>
+          </div>
+          <div id="currentSetsList" class="space-y-2">
+            <div class="text-center py-5 rounded-2xl border border-dashed border-[#23304a] text-xs text-slate-400">
+              まだセットが追加されていません。重量と回数を選んで「＋ セットを追加」を押してください。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. 画面最下部のアクションバー：「次の種目へ」と「ワークアウト終了」 -->
+      <div class="pt-2 pb-6 grid grid-cols-2 gap-3">
+        <button id="nextExerciseBtn" type="button" class="min-h-[56px] px-4 py-3.5 rounded-2xl bg-[#131b2e] hover:bg-slate-800 active:scale-[0.98] border border-[#23304a] text-white font-extrabold text-sm sm:text-base shadow-lg flex items-center justify-center gap-2 transition cursor-pointer">
+          <span>次の種目へ</span>
+          <svg class="w-5 h-5 text-[#38bdf8]" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </button>
+
+        <button id="finishWorkoutBtn" type="button" class="min-h-[56px] px-4 py-3.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-[0.98] text-slate-950 font-extrabold text-sm sm:text-base shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>ワークアウト終了</span>
+        </button>
+      </div>
+
+    </section>
+
+
+    <!-- *********************************************************
+         VIEW 3: 本日の結果画面（resultView）
+         ※全体の総挙上重量・全体の平均回数は一切表示しない
+         ********************************************************* -->
+    <section id="resultView" style="display: none;" class="hidden space-y-5 animate-fade-in">
+
+      <!-- リザルトヘッダーバナー（日時・場所・PR達成件数のみ） -->
+      <div class="rounded-3xl app-card border p-6 text-center relative overflow-hidden shadow-2xl">
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#10b981]/15 border border-[#10b981]/40 text-[#10b981] text-xs font-extrabold mb-3">
+          WORKOUT COMPLETED
+        </div>
+        <h1 class="text-2xl font-extrabold text-white">本日のトレーニング結果</h1>
+
+        <div class="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2 text-xs sm:text-sm text-slate-200">
+          <span id="resultDateTime" class="inline-flex items-center gap-1.5 bg-[#0b0f19] border border-[#23304a] px-3.5 py-1.5 rounded-xl font-bold">
+            🗓️ --
+          </span>
+          <span id="resultGymName" class="inline-flex items-center gap-1.5 bg-[#0b0f19] border border-[#23304a] px-3.5 py-1.5 rounded-xl font-bold text-[#10b981]">
+            📍 --
+          </span>
+        </div>
+
+        <div class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#f59e0b]/15 border border-[#f59e0b]/50 text-[#f59e0b] text-xs sm:text-sm font-extrabold">
+          <span>🏆</span>
+          <span id="resultPrCount">記録更新（PR）達成: 0種目</span>
+        </div>
+      </div>
+
+      <!-- 種目別リザルトカード（最大重量・平均重量・NEW RECORD判定） -->
+      <div class="space-y-3.5">
+        <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+          <span class="w-1.5 h-5 rounded-full bg-[#f59e0b]"></span>
+          種目別リザルト
+        </h2>
+        <div id="resultExercisesList" class="space-y-3.5">
+          <!-- JSで描画 -->
+        </div>
+      </div>
+
+      <!-- アクションボタン：結果をExcelで出力 & ホームへ戻る -->
+      <div class="pt-2 pb-6 space-y-3">
+        <button id="exportResultExcelBtn" type="button" class="w-full min-h-[54px] rounded-2xl bg-[#10b981] hover:bg-emerald-400 active:scale-[0.99] text-slate-950 font-extrabold text-base shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition cursor-pointer">
+          <span>📊</span>
+          <span>結果をExcelで出力 (.xlsx)</span>
+        </button>
+
+        <button id="backToHomeFromResultBtn" type="button" class="w-full min-h-[52px] rounded-2xl bg-[#131b2e] hover:bg-slate-800 active:scale-[0.99] border border-[#23304a] text-white font-extrabold text-base transition cursor-pointer">
+          ホームへ戻る
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- =========================================================
+       モーダル 0: 記録画面「← 戻る」専用確認モーダル（1セット以上記録済み時）
+       ========================================================= -->
+  <div id="workoutBackModal" style="display: none;" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-[440px] rounded-3xl app-card border p-6 shadow-2xl space-y-4 animate-fade-in">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white flex items-center gap-2">
+          <span class="text-[#38bdf8]">←</span> ワークアウトを中断しますか？
+        </h3>
+        <button id="closeWorkoutBackModalXBtn" type="button" class="w-8 h-8 rounded-xl bg-[#0b0f19] border border-[#23304a] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+
+      <p id="workoutBackModalDesc" class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+        現在記録中のセットデータがあります。ホーム画面へ戻る方法を選択してください。
+      </p>
+
+      <div class="space-y-2.5 pt-1">
+        <!-- 選択肢 1: 一時中断してホームへ戻る（後で再開可能） -->
+        <button id="backPauseWorkoutBtn" type="button" class="w-full min-h-[50px] px-4 py-3 rounded-2xl bg-[#f59e0b] hover:bg-amber-400 active:scale-[0.99] text-slate-950 font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer">
+          一時中断してホームへ戻る（後で再開可能）
+        </button>
+
+        <!-- 選択肢 2: 記録を破棄してホームへ戻る -->
+        <button id="backDiscardWorkoutBtn" type="button" class="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#ef4444]/15 hover:bg-[#ef4444] active:scale-[0.99] border border-[#ef4444]/60 text-[#ef4444] hover:text-white font-extrabold text-xs sm:text-sm transition cursor-pointer">
+          記録を破棄してホームへ戻る
+        </button>
+
+        <!-- 選択肢 3: キャンセル（記録を続ける） -->
+        <button id="backCancelModalBtn" type="button" class="w-full min-h-[46px] px-4 py-2.5 rounded-2xl bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-200 font-bold text-xs sm:text-sm transition cursor-pointer">
+          キャンセル（記録を続ける）
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       モーダル 1: 範囲指定Excel出力モーダル（#rangeExportModal）
+       ========================================================= -->
+  <div id="rangeExportModal" style="display: none;" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div class="w-full max-w-[520px] rounded-3xl app-card border p-5 sm:p-6 shadow-2xl space-y-4 animate-fade-in my-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white flex items-center gap-2">
+          <span>📅</span> 範囲指定でExcel出力 (.xlsx)
+        </h3>
+        <button id="closeRangeExportModalBtn" type="button" class="w-8 h-8 rounded-xl bg-[#0b0f19] border border-[#23304a] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+
+      <!-- クイック期間プリセットボタン -->
+      <div>
+        <div class="text-xs font-bold text-slate-300 mb-2">期間プリセット</div>
+        <div class="flex flex-wrap gap-1.5">
+          <button type="button" data-range-preset="thisMonth" class="range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0b0f19] hover:bg-[#38bdf8] border border-[#23304a] text-xs font-bold text-slate-200 hover:text-slate-950 transition cursor-pointer">
+            今月
+          </button>
+          <button type="button" data-range-preset="lastMonth" class="range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0b0f19] hover:bg-[#38bdf8] border border-[#23304a] text-xs font-bold text-slate-200 hover:text-slate-950 transition cursor-pointer">
+            先月
+          </button>
+          <button type="button" data-range-preset="last3Months" class="range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0b0f19] hover:bg-[#38bdf8] border border-[#23304a] text-xs font-bold text-slate-200 hover:text-slate-950 transition cursor-pointer">
+            直近3ヶ月
+          </button>
+          <button type="button" data-range-preset="thisYear" class="range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0b0f19] hover:bg-[#38bdf8] border border-[#23304a] text-xs font-bold text-slate-200 hover:text-slate-950 transition cursor-pointer">
+            今年
+          </button>
+          <button type="button" data-range-preset="all" class="range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0b0f19] hover:bg-[#38bdf8] border border-[#23304a] text-xs font-bold text-slate-200 hover:text-slate-950 transition cursor-pointer">
+            すべて
+          </button>
+        </div>
+      </div>
+
+      <!-- 開始日・終了日入力 -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="exportStartDate" class="block text-xs font-bold text-slate-300 mb-1">開始日</label>
+          <input id="exportStartDate" type="date" class="w-full min-h-[44px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-[#38bdf8]" />
+        </div>
+        <div>
+          <label for="exportEndDate" class="block text-xs font-bold text-slate-300 mb-1">終了日</label>
+          <input id="exportEndDate" type="date" class="w-full min-h-[44px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-[#38bdf8]" />
+        </div>
+      </div>
+
+      <!-- 種目フィルター（任意） -->
+      <div>
+        <label for="exportExerciseFilter" class="block text-xs font-bold text-slate-300 mb-1">種目フィルター（任意）</label>
+        <select id="exportExerciseFilter" class="w-full min-h-[44px] bg-[#0b0f19] border border-[#23304a] rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-[#38bdf8]">
+          <option value="">すべての種目</option>
+        </select>
+      </div>
+
+      <!-- ライブプレビューカウンター -->
+      <div class="rounded-2xl app-subcard border p-3.5 space-y-1">
+        <div class="text-[11px] font-bold text-[#38bdf8]">抽出プレビュー</div>
+        <div id="rangePreviewSummary" class="text-sm font-extrabold text-white font-mono-num">
+          対象ワークアウト: 0件 / 合計セット数: 0セット
+        </div>
+        <div class="text-[11px] text-slate-400">
+          条件に一致する記録が「種目別サマリー」「セット詳細」の2シートで出力されます。
+        </div>
+      </div>
+
+      <!-- 実行・キャンセルボタン -->
+      <div class="grid grid-cols-2 gap-2.5 pt-1">
+        <button id="cancelRangeExportBtn" type="button" class="min-h-[48px] px-4 py-2.5 rounded-2xl bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-300 font-bold text-sm transition cursor-pointer">
+          キャンセル
+        </button>
+        <button id="confirmRangeExportBtn" type="button" class="min-h-[48px] px-4 py-2.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 text-slate-950 font-extrabold text-sm shadow-md transition cursor-pointer">
+          指定範囲をExcel出力
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       モーダル 2: Excelデータインポート（引き継ぎ）モーダル（#excelImportModal）
+       ========================================================= -->
+  <div id="excelImportModal" style="display: none;" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div class="w-full max-w-[520px] rounded-3xl app-card border p-5 sm:p-6 shadow-2xl space-y-4 animate-fade-in my-auto">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-extrabold text-white flex items-center gap-2">
+          <span>📥</span> Excelデータインポート（引き継ぎ）
+        </h3>
+        <button id="closeExcelImportModalBtn" type="button" class="w-8 h-8 rounded-xl bg-[#0b0f19] border border-[#23304a] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        このアプリで出力したExcelファイル（<code class="text-[#10b981]">.xlsx</code>）を選択すると、過去のトレーニング記録を解析して引き継ぐことができます。
+      </p>
+
+      <!-- ファイル選択エリア -->
+      <label for="excelImportFileInput" class="block rounded-2xl border-2 border-dashed border-[#38bdf8]/60 hover:border-[#38bdf8] bg-[#0b0f19] p-5 text-center cursor-pointer transition">
+        <div class="text-2xl mb-1.5">📄</div>
+        <div id="importSelectedFileName" class="text-sm font-extrabold text-white">
+          タップしてExcelファイル（.xlsx / .xls）を選択
+        </div>
+        <div class="text-[11px] text-slate-400 mt-1">
+          「セット詳細」シート（または「種目別サマリー」シート）を自動読み込みします
+        </div>
+        <input id="excelImportFileInput" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" class="hidden" />
+      </label>
+
+      <!-- 解析プレビューカード（ファイル選択後に表示） -->
+      <div id="importPreviewBox" style="display: none;" class="hidden rounded-2xl app-subcard border border-[#10b981]/50 p-4 space-y-2.5 animate-fade-in">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-extrabold text-[#10b981]">✓ ファイル解析完了</span>
+          <span id="importPreviewDateRange" class="text-[11px] font-mono-num text-slate-300">-- 〜 --</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center pt-1">
+          <div class="rounded-xl bg-[#131b2e] border border-[#23304a] p-2.5">
+            <div class="text-[10px] text-slate-400 font-bold">ワークアウト数</div>
+            <div id="importPreviewWorkoutCount" class="font-mono-num text-base font-extrabold text-white mt-0.5">0件</div>
+          </div>
+          <div class="rounded-xl bg-[#131b2e] border border-[#23304a] p-2.5">
+            <div class="text-[10px] text-slate-400 font-bold">実施種目数</div>
+            <div id="importPreviewExerciseCount" class="font-mono-num text-base font-extrabold text-[#38bdf8] mt-0.5">0種目</div>
+          </div>
+          <div class="rounded-xl bg-[#131b2e] border border-[#23304a] p-2.5">
+            <div class="text-[10px] text-slate-400 font-bold">合計セット数</div>
+            <div id="importPreviewSetCount" class="font-mono-num text-base font-extrabold text-[#10b981] mt-0.5">0セット</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 引き継ぎ実行ボタン（解析完了後に有効化） -->
+      <div class="space-y-2 pt-1">
+        <button id="importMergeBtn" type="button" disabled class="w-full min-h-[50px] px-4 py-3 rounded-2xl bg-[#10b981] disabled:bg-slate-700 disabled:text-slate-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm shadow-md transition cursor-pointer disabled:cursor-not-allowed">
+          追加・マージして引き継ぐ（重複スキップ）
+        </button>
+
+        <button id="importOverwriteBtn" type="button" disabled class="w-full min-h-[46px] px-4 py-2.5 rounded-2xl bg-[#f59e0b]/20 disabled:bg-slate-800 disabled:border-slate-700 disabled:text-slate-500 hover:bg-[#f59e0b] border border-[#f59e0b]/60 text-[#f59e0b] hover:text-slate-950 font-extrabold text-xs sm:text-sm transition cursor-pointer disabled:cursor-not-allowed">
+          現在のデータを上書きして復元
+        </button>
+
+        <button id="cancelExcelImportBtn" type="button" class="w-full min-h-[42px] px-4 py-2 rounded-2xl bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-400 font-bold text-xs transition cursor-pointer">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       モーダル 3: 汎用確認ダイアログ（alert / confirm 代替）
+       ========================================================= -->
+  <div id="customModal" style="display: none;" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-sm rounded-3xl app-card border p-6 shadow-2xl space-y-4 animate-fade-in">
+      <h3 id="modalTitle" class="text-lg font-extrabold text-white">確認</h3>
+      <p id="modalMessage" class="text-sm text-slate-300 leading-relaxed"></p>
+      <div class="flex items-center justify-end gap-2.5 pt-2">
+        <button id="modalCancelBtn" type="button" class="min-h-[42px] px-4 py-2 rounded-xl bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-slate-300 font-bold text-sm transition cursor-pointer">
+          キャンセル
+        </button>
+        <button id="modalConfirmBtn" type="button" class="min-h-[42px] px-4 py-2 rounded-xl bg-[#38bdf8] hover:bg-sky-300 text-slate-950 font-extrabold text-sm transition cursor-pointer">
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       トースト通知コンテナ
+       ========================================================= -->
+  <div id="toastContainer" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none w-full max-w-[420px] px-4"></div>
+
+  <!-- =========================================================
+       単一スクリプトブロック（完全自己完結・サンドボックス耐性）
+       ========================================================= -->
+  <script>
+    /**
+     * ============================================================================
+     * 1. 定数・マスターデータ定義
+     * ============================================================================
+     */
+    var STORAGE_KEY = 'workout_tracker_app_data_v1';
+
+    // ホーム画面2x2ダッシュボード固定の主要4種目（BIG3 + 懸垂）
+    var BIG4_EXERCISES = [
+      { name: 'ベンチプレス', sub: 'BENCH PRESS', badge: 'BIG3', accent: '#f59e0b' },
+      { name: 'スクワット', sub: 'SQUAT', badge: 'BIG3', accent: '#10b981' },
+      { name: 'デットリフト', sub: 'DEADLIFT', badge: 'BIG3', accent: '#38bdf8' },
+      { name: '懸垂（チンニング）', sub: 'PULL-UP / CHIN-UP', badge: 'BACK', accent: '#10b981' }
+    ];
+
+    // 90種目以上の筋トレデータベース（フリーウェイト・マシン・自重・予測変換キーワード）
+    var MASTER_EXERCISES = [
+      // --- 胸（Chest） ---
+      { name: 'ベンチプレス', category: '胸', keywords: 'べんちぷれす bench press big3' },
+      { name: 'インクラインベンチプレス', category: '胸', keywords: 'いんくらいんべんち incline bench' },
+      { name: 'デクラインベンチプレス', category: '胸', keywords: 'でくらいんべんち decline bench' },
+      { name: 'ダンベルベンチプレス', category: '胸', keywords: 'だんべるべんち だんべるぷれす dumbbell bench press' },
+      { name: 'インクラインダンベルプレス', category: '胸', keywords: 'いんくらいんだんべる incline dumbbell press' },
+      { name: 'ダンベルフライ', category: '胸', keywords: 'だんべるふらい dumbbell fly' },
+      { name: 'インクラインダンベルフライ', category: '胸', keywords: 'いんくらいんだんべるふらい incline fly' },
+      { name: 'チェストプレス（マシン）', category: '胸', keywords: 'ちぇすとぷれす chest press machine' },
+      { name: 'インクラインチェストプレス（マシン）', category: '胸', keywords: 'いんくらいんちぇすとぷれす incline machine' },
+      { name: 'ペックデッキフライ（バタフライ）', category: '胸', keywords: 'ぺっくでっき ばたふらい pec deck butterfly fly' },
+      { name: 'ケーブルクロスオーバー', category: '胸', keywords: 'けーぶるくろすおーばー cable crossover' },
+      { name: 'スミスマシンベンチプレス', category: '胸', keywords: 'すみすましんべんち smith bench' },
+      { name: 'インクラインスミスプレス', category: '胸', keywords: 'いんくらいんすみす incline smith' },
+      { name: 'ディップス', category: '胸・腕', keywords: 'でぃっぷす dips' },
+      { name: 'プッシュアップ（腕立て伏せ）', category: '胸', keywords: 'ぷっしゅあっぷ うでたてふせ push up' },
+
+      // --- 脚（Legs） ---
+      { name: 'スクワット', category: '脚', keywords: 'すくわっと squat big3 バーベルスクワット' },
+      { name: 'フロントスクワット', category: '脚', keywords: 'ふろんとすくわっと front squat' },
+      { name: 'ブルガリアンスクワット', category: '脚', keywords: 'ぶるがりあんすくわっと bulgarian split squat' },
+      { name: 'ゴブレットスクワット', category: '脚', keywords: 'ごぶれっとすくわっと goblet squat' },
+      { name: 'ハックスクワット', category: '脚', keywords: 'はっくすくわっと hack squat' },
+      { name: 'スミスマシンスクワット', category: '脚', keywords: 'すみすましんすくわっと smith squat' },
+      { name: 'レッグプレス', category: '脚', keywords: 'れっぐぷれす leg press' },
+      { name: 'レッグエクステンション', category: '脚', keywords: 'れっぐえくすてんしょん leg extension' },
+      { name: 'レッグカール（ライイング）', category: '脚', keywords: 'れっぐかーる leg curl lying' },
+      { name: 'シーテッドレッグカール', category: '脚', keywords: 'しーてっどれっぐかーる seated leg curl' },
+      { name: 'ランジ（ダンベル・バーベル）', category: '脚', keywords: 'らんじ lunge walking lunge' },
+      { name: 'ヒップスラスト', category: '脚・尻', keywords: 'ひっぷすらすと hip thrust' },
+      { name: 'アダクション（内転筋）', category: '脚', keywords: 'あだくしょん adduction' },
+      { name: 'アブダクション（中臀筋）', category: '脚・尻', keywords: 'あぶだくしょん abduction' },
+      { name: 'スタンディングカーフレイズ', category: '脚', keywords: 'かーふれいず standing calf raise' },
+      { name: 'シーテッドカーフレイズ', category: '脚', keywords: 'しーてっどかーふれいず seated calf raise' },
+
+      // --- 背中（Back） ---
+      { name: 'デットリフト', category: '背中', keywords: 'でっどりふと deadlift big3 コンベンショナル' },
+      { name: 'スモウデットリフト', category: '背中・脚', keywords: 'すもうでっどりふと sumo deadlift' },
+      { name: 'ルーマニアンデットリフト（RDL）', category: '背中・脚', keywords: 'るーまにあんでっどりふと rdl romanian deadlift' },
+      { name: 'トップサイドデットリフト', category: '背中', keywords: 'とっぷさいどでっどりふと rack pull' },
+      { name: '懸垂（チンニング）', category: '背中', keywords: 'けんすい ちんにんぐ ぷるあっぷ pull up chin up' },
+      { name: '加重懸垂', category: '背中', keywords: 'かじゅうけんすい weighted pull up' },
+      { name: 'アシストチンニング（マシン）', category: '背中', keywords: 'あしすとちんにんぐ assisted pull up' },
+      { name: 'ラットプルダウン', category: '背中', keywords: 'らっとぷるだうん lat pulldown' },
+      { name: 'ビハインドネックラットプルダウン', category: '背中', keywords: 'びはいんどねっくらっとぷる behind neck' },
+      { name: 'ナローグリップラットプルダウン', category: '背中', keywords: 'なろーぐりっぷらっとぷる close grip lat' },
+      { name: 'ベントオーバーロウ', category: '背中', keywords: 'べんとおーばーろう bent over row' },
+      { name: 'ワンハンドダンベルロウ', category: '背中', keywords: 'わんはんどだんべるろう one arm dumbbell row' },
+      { name: 'シーテッドケーブルロウ', category: '背中', keywords: 'しーてっどろう けーぶるろう seated cable row' },
+      { name: 'Tバーロウ', category: '背中', keywords: 'てぃーばーろう t-bar row' },
+      { name: 'マシンロウ（アイソラテラルロウ）', category: '背中', keywords: 'ましんろう あいそらてらる machine row' },
+      { name: 'ダンベルプルオーバー', category: '背中・胸', keywords: 'ぷるおーばー dumbbell pullover' },
+      { name: 'ケーブルプルオーバー（ストレートアーム）', category: '背中', keywords: 'けーぶるぷるおーばー straight arm pulldown' },
+      { name: 'バックエクステンション（背筋）', category: '背中', keywords: 'ばっくえくすてんしょん はいきん back extension' },
+
+      // --- 肩（Shoulders） ---
+      { name: 'ショルダープレス（バーベル）', category: '肩', keywords: 'しょるだーぷれす ばーべる shoulder press overhead press ohp' },
+      { name: 'ダンベルショルダープレス', category: '肩', keywords: 'だんべるしょるだーぷれす dumbbell shoulder press' },
+      { name: 'マシンショルダープレス', category: '肩', keywords: 'ましんしょるだーぷれす machine shoulder press' },
+      { name: 'スミスマシンショルダープレス', category: '肩', keywords: 'すみすしょるだーぷれす smith shoulder' },
+      { name: 'アーノルドプレス', category: '肩', keywords: 'あーのるどぷれす arnold press' },
+      { name: 'サイドレイズ（ダンベル）', category: '肩', keywords: 'さいどれいず lateral raise side raise' },
+      { name: 'ケーブルサイドレイズ', category: '肩', keywords: 'けーぶるさいどれいず cable lateral raise' },
+      { name: 'マシンサイドレイズ', category: '肩', keywords: 'ましんさいどれいず machine lateral raise' },
+      { name: 'フロントレイズ', category: '肩', keywords: 'ふろんとれいず front raise' },
+      { name: 'リアレイズ（ベントオーバー）', category: '肩', keywords: 'りあれいず rear delt raise' },
+      { name: 'リアデルトフライ（マシン）', category: '肩', keywords: 'りあでるとふらい reverse pec deck' },
+      { name: 'フェイスプル', category: '肩', keywords: 'ふぇいすぷる face pull' },
+      { name: 'アップライトロウ', category: '肩', keywords: 'あっぷらいとろう upright row' },
+      { name: 'バーベルシュラッグ', category: '肩・僧帽筋', keywords: 'しゅらっぐ barbell shrug' },
+      { name: 'ダンベルシュラッグ', category: '肩・僧帽筋', keywords: 'だんべるしゅらっぐ dumbbell shrug' },
+
+      // --- 腕（Arms） ---
+      { name: 'バーベルカール', category: '腕', keywords: 'ばーべるかーる あーむかーる barbell curl' },
+      { name: 'EZバーカール', category: '腕', keywords: 'いーじーばーかーる ez bar curl' },
+      { name: 'ダンベルカール', category: '腕', keywords: 'だんべるかーる あーむかーる dumbbell curl' },
+      { name: 'インクラインダンベルカール', category: '腕', keywords: 'いんくらいんだんべるかーる incline curl' },
+      { name: 'ハンマーカール', category: '腕', keywords: 'はんまーかーる hammer curl' },
+      { name: 'プリチャーカール', category: '腕', keywords: 'ぷりちゃーかーる preacher curl' },
+      { name: 'ケーブルカール', category: '腕', keywords: 'けーぶるかーる cable curl' },
+      { name: 'コンセントレーションカール', category: '腕', keywords: 'こんせんとれーしょんかーる concentration curl' },
+      { name: 'トライセプスプレスダウン（ケーブル）', category: '腕', keywords: 'とらいせぷすぷれすだうん tricep pushdown' },
+      { name: 'ローププレスダウン', category: '腕', keywords: 'ろーぷぷれすだうん rope pushdown' },
+      { name: 'スカルクラッシャー（ライイングトライセプス）', category: '腕', keywords: 'すかるくらっしゃー skull crusher' },
+      { name: 'フレンチプレス（オーバーヘッドエクステンション）', category: '腕', keywords: 'ふれんちぷれす french press overhead extension' },
+      { name: 'ナローベンチプレス', category: '腕・胸', keywords: 'なろーべんちぷれす close grip bench press' },
+      { name: 'トライセプスキックバック', category: '腕', keywords: 'きっくばっく tricep kickback' },
+      { name: 'リストカール', category: '腕・前腕', keywords: 'りすとかーる wrist curl' },
+
+      // --- 腹筋・体幹・全身 ---
+      { name: 'クランチ', category: '腹筋', keywords: 'くらんち crunch' },
+      { name: 'ケーブルクランチ', category: '腹筋', keywords: 'けーぶるくらんち cable crunch' },
+      { name: 'アブドミナルクランチ（マシン）', category: '腹筋', keywords: 'あぶどみなるくらんち machine crunch' },
+      { name: 'レッグレイズ', category: '腹筋', keywords: 'れっぐれいず leg raise' },
+      { name: 'ハンギングレッグレイズ', category: '腹筋', keywords: 'はんぎんぐれっぐれいず hanging leg raise' },
+      { name: 'アブローラー（腹筋ローラー）', category: '腹筋', keywords: 'あぶろーらー ふっきんろーらー ab wheel rollout' },
+      { name: 'サイドベント', category: '腹筋', keywords: 'さいどべんと side bend' },
+      { name: 'プランク', category: '体幹', keywords: 'ぷらんく plank' },
+      { name: 'クリーン＆ジャーク', category: '全身', keywords: 'くりーん clean and jerk' },
+      { name: 'パワークリーン', category: '全身', keywords: 'ぱわーくりーん power clean' },
+      { name: 'ケトルベルスイング', category: '全身', keywords: 'けとるべるすいんぐ kettlebell swing' }
+    ];
+
+    /**
+     * ============================================================================
+     * 2. サンドボックス安全なストレージラッパー（try / catch + メモリフォールバック）
+     * ============================================================================
+     */
+    var memoryStorageFallback = {};
+
+    function safeGetStorage(key) {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          return window.localStorage.getItem(key);
+        }
+      } catch (e) {
+        // サンドボックスiframeやプライベートモード制限時はメモリフォールバックへ移行
+      }
+      return Object.prototype.hasOwnProperty.call(memoryStorageFallback, key)
+        ? memoryStorageFallback[key]
+        : null;
+    }
+
+    function safeSetStorage(key, value) {
+      memoryStorageFallback[key] = value;
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(key, value);
+          return true;
+        }
+      } catch (e) {
+        // メモリ内フォールバックに保持済み
+      }
+      return false;
+    }
+
+    function safeRemoveStorage(key) {
+      delete memoryStorageFallback[key];
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.removeItem(key);
+        }
+      } catch (e) {
+        // 無視
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 3. アプリケーション状態（State）
+     * ============================================================================
+     */
+    var state = {
+      workouts: [],             // 完了済みワークアウト一覧
+      customExercises: [],      // ユーザー自由入力種目
+      gymHistory: [],           // ジム名候補履歴
+      activeSession: null,      // 進行中ワークアウト
+      lastFinishedResult: null, // 直前に終了したワークアウト結果
+      expandedBig4: {},         // BIG4アコーディオン開閉状態
+      parsedImportWorkouts: []  // Excelインポート解析済みワークアウト一時保持
+    };
+
+    // インターバルストップウォッチ制御（MM:SS）
+    var stopwatchInterval = null;
+    var swState = {
+      isRunning: false,
+      startTime: 0,
+      elapsedMs: 0
+    };
+
+    // 位置情報から検出されたジム候補
+    var detectedLocationSuggestions = [];
+
+    /**
+     * ============================================================================
+     * 4. ユーティリティ関数
+     * ============================================================================
+     */
+    function $id(id) {
+      return document.getElementById(id);
+    }
+
+    function setElementVisible(el, visible, displayType) {
+      if (!el) return;
+      if (visible) {
+        el.classList.remove('hidden');
+        el.style.display = displayType || 'block';
+      } else {
+        el.classList.add('hidden');
+        el.style.display = 'none';
+      }
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // 表記ゆれ正規化
+    function normalizeExerciseName(name) {
+      if (!name) return '';
+      var trimmed = String(name).trim();
+      if (trimmed === '懸垂' || trimmed === 'チンニング' || trimmed === 'プルアップ') {
+        return '懸垂（チンニング）';
+      }
+      return trimmed;
+    }
+
+    // YYYY-MM-DDTHH:mm -> YYYY/MM/DD HH:mm
+    function formatDisplayDateTime(isoLocalStr) {
+      if (!isoLocalStr) return '--';
+      return String(isoLocalStr).replace('T', ' ').replace(/-/g, '/');
+    }
+
+    // YYYY-MM-DDTHH:mm -> YYYY/MM/DD
+    function formatShortDate(isoLocalStr) {
+      if (!isoLocalStr) return '--';
+      return String(isoLocalStr).split('T')[0].replace(/-/g, '/');
+    }
+
+    // YYYY-MM-DDTHH:mm -> YYYY-MM-DD
+    function extractIsoDateOnly(isoLocalStr) {
+      if (!isoLocalStr) return '';
+      return String(isoLocalStr).split('T')[0];
+    }
+
+    // 現在ローカル日時文字列（YYYY-MM-DDTHH:mm）
+    function getCurrentLocalDateTimeString() {
+      var now = new Date();
+      var pad = function (n) { return String(n).padStart(2, '0'); };
+      return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    }
+
+    // Dateオブジェクト -> YYYY-MM-DD
+    function formatDateInputVal(dateObj) {
+      var pad = function (n) { return String(n).padStart(2, '0'); };
+      return dateObj.getFullYear() + '-' + pad(dateObj.getMonth() + 1) + '-' + pad(dateObj.getDate());
+    }
+
+    // Excelセル（文字列またはシリアル数値）を内部標準 YYYY-MM-DDTHH:mm へ正規化
+    function normalizeImportedDateTime(rawVal) {
+      if (rawVal === null || rawVal === undefined || rawVal === '') {
+        return getCurrentLocalDateTimeString();
+      }
+      if (typeof rawVal === 'number' && !isNaN(rawVal)) {
+        var utcDays = Math.floor(rawVal - 25569);
+        var utcValue = utcDays * 86400;
+        var dateInfo = new Date(utcValue * 1000);
+        var fractionalDay = rawVal - Math.floor(rawVal) + 0.0000001;
+        var totalSeconds = Math.floor(86400 * fractionalDay);
+        var hours = Math.floor(totalSeconds / 3600);
+        var minutes = Math.floor((totalSeconds % 3600) / 60);
+        var pad = function (n) { return String(n).padStart(2, '0'); };
+        return dateInfo.getUTCFullYear() + '-' + pad(dateInfo.getUTCMonth() + 1) + '-' + pad(dateInfo.getUTCDate()) + 'T' + pad(hours) + ':' + pad(minutes);
+      }
+
+      var str = String(rawVal).trim().replace(/\//g, '-');
+      var match = str.match(/^(\d{4}-\d{1,2}-\d{1,2})[T\s]+(\d{1,2}:\d{2})/);
+      if (match) {
+        var dParts = match[1].split('-');
+        var tParts = match[2].split(':');
+        return dParts[0] + '-' + dParts[1].padStart(2, '0') + '-' + dParts[2].padStart(2, '0') + 'T' + tParts[0].padStart(2, '0') + ':' + tParts[1].padStart(2, '0');
+      }
+      var dateOnlyMatch = str.match(/^(\d{4}-\d{1,2}-\d{1,2})/);
+      if (dateOnlyMatch) {
+        var dp = dateOnlyMatch[1].split('-');
+        return dp[0] + '-' + dp[1].padStart(2, '0') + '-' + dp[2].padStart(2, '0') + 'T00:00';
+      }
+      return getCurrentLocalDateTimeString();
+    }
+
+    // localStorage から全データ読み込み
+    function loadAllFromStorage() {
+      try {
+        var raw = safeGetStorage(STORAGE_KEY);
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          state.workouts = Array.isArray(parsed.workouts) ? parsed.workouts : [];
+          state.customExercises = Array.isArray(parsed.customExercises) ? parsed.customExercises : [];
+          state.gymHistory = Array.isArray(parsed.gymHistory) ? parsed.gymHistory : [];
+          state.activeSession = parsed.activeSession || null;
+        }
+      } catch (e) {
+        state.workouts = [];
+        state.customExercises = [];
+        state.gymHistory = [];
+        state.activeSession = null;
+      }
+    }
+
+    // localStorage へ全データ保存
+    function persistAllToStorage() {
+      try {
+        if (state.activeSession) {
+          state.activeSession.swState = {
+            isRunning: swState.isRunning,
+            startTime: swState.startTime,
+            elapsedMs: swState.isRunning ? (Date.now() - swState.startTime) : swState.elapsedMs
+          };
+        }
+
+        var payload = {
+          workouts: state.workouts,
+          customExercises: state.customExercises,
+          gymHistory: state.gymHistory,
+          activeSession: state.activeSession,
+          updatedAt: new Date().toISOString()
+        };
+        safeSetStorage(STORAGE_KEY, JSON.stringify(payload));
+      } catch (e) {
+        // メモリ内stateは保持済み
+      }
+    }
+
+    function saveWorkouts() { persistAllToStorage(); }
+    function saveCustomExercises() { persistAllToStorage(); }
+    function saveGymHistory() { persistAllToStorage(); }
+    function saveActiveSession() { persistAllToStorage(); }
+
+    // トースト通知
+    function showToast(message, type) {
+      var container = $id('toastContainer');
+      if (!container) return;
+      var toast = document.createElement('div');
+      var styles = {
+        info: 'bg-[#131b2e] border-[#23304a] text-white',
+        success: 'bg-[#064e3b] border-[#10b981] text-emerald-100',
+        warning: 'bg-[#78350f] border-[#f59e0b] text-amber-100',
+        error: 'bg-[#7f1d1d] border-[#ef4444] text-red-100'
+      };
+      toast.className = 'pointer-events-auto px-4 py-3 rounded-2xl border shadow-2xl text-xs sm:text-sm font-bold flex items-center gap-2 animate-fade-in ' + (styles[type] || styles.info);
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(function () {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.25s ease';
+        setTimeout(function () {
+          if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 260);
+      }, 3000);
+    }
+
+    // カスタム確認モーダル（alert / confirm 代替）
+    function showConfirmModal(title, message, confirmLabel, isDanger) {
+      return new Promise(function (resolve) {
+        var modal = $id('customModal');
+        var titleEl = $id('modalTitle');
+        var msgEl = $id('modalMessage');
+        var cancelBtn = $id('modalCancelBtn');
+        var confirmBtn = $id('modalConfirmBtn');
+
+        if (!modal || !titleEl || !msgEl || !cancelBtn || !confirmBtn) {
+          resolve(true);
+          return;
+        }
+
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+        confirmBtn.textContent = confirmLabel || '実行する';
+        confirmBtn.className = isDanger
+          ? 'min-h-[42px] px-4 py-2 rounded-xl bg-[#ef4444] hover:bg-red-400 text-white font-extrabold text-sm transition cursor-pointer'
+          : 'min-h-[42px] px-4 py-2 rounded-xl bg-[#38bdf8] hover:bg-sky-300 text-slate-950 font-extrabold text-sm transition cursor-pointer';
+
+        setElementVisible(modal, true, 'flex');
+
+        var cleanup = function (result) {
+          setElementVisible(modal, false);
+          cancelBtn.removeEventListener('click', onCancel);
+          confirmBtn.removeEventListener('click', onConfirm);
+          resolve(result);
+        };
+
+        var onCancel = function () { cleanup(false); };
+        var onConfirm = function () { cleanup(true); };
+
+        cancelBtn.addEventListener('click', onCancel);
+        confirmBtn.addEventListener('click', onConfirm);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 5. 画面遷移制御（homeView / workoutView / resultView）
+     * ============================================================================
+     */
+    function switchView(viewName) {
+      var homeView = $id('homeView');
+      var workoutView = $id('workoutView');
+      var resultView = $id('resultView');
+
+      setElementVisible(homeView, false);
+      setElementVisible(workoutView, false);
+      setElementVisible(resultView, false);
+
+      if (viewName === 'home') {
+        setElementVisible(homeView, true, 'block');
+        try { renderHomeScreen(); } catch (e) { console.error(e); }
+      } else if (viewName === 'workout') {
+        setElementVisible(workoutView, true, 'block');
+        try { renderWorkoutScreen(); } catch (e) { console.error(e); }
+      } else if (viewName === 'result') {
+        setElementVisible(resultView, true, 'block');
+        try { renderResultScreen(); } catch (e) { console.error(e); }
+      }
+
+      try {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) {
+        try { window.scrollTo(0, 0); } catch (e2) {}
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 6. 記録画面「← 戻る」アクション制御（0セット自動破棄 / 1セット以上は3択モーダル）
+     * ============================================================================
+     */
+    function getRecordedSetsCountInActiveSession() {
+      if (!state.activeSession) return 0;
+      var completedSetsCount = (state.activeSession.completedExercises || []).reduce(function (sum, ex) {
+        return sum + (Array.isArray(ex.sets) ? ex.sets.length : 0);
+      }, 0);
+      var currentSetsCount = Array.isArray(state.activeSession.currentSets)
+        ? state.activeSession.currentSets.length
+        : 0;
+      return completedSetsCount + currentSetsCount;
+    }
+
+    function handleWorkoutBackAction() {
+      if (!state.activeSession) {
+        resetStopwatchToZero(false);
+        switchView('home');
+        return;
+      }
+
+      var totalRecordedSets = getRecordedSetsCountInActiveSession();
+
+      // まだ1セットも記録されていない場合（誤タップ開始時）：即座に自動破棄してクリーンな状態でホームへ戻る
+      if (totalRecordedSets === 0) {
+        state.activeSession = null;
+        saveActiveSession();
+        resetStopwatchToZero(false);
+        switchView('home');
+        showToast('ワークアウトをキャンセルしてホームへ戻りました', 'info');
+        return;
+      }
+
+      // 1セット以上記録されている場合：3択専用モーダルを表示
+      var descEl = $id('workoutBackModalDesc');
+      if (descEl) {
+        descEl.textContent = '現在 ' + totalRecordedSets + 'セット の記録があります。ホーム画面へ戻る方法を選択してください。';
+      }
+      setElementVisible($id('workoutBackModal'), true, 'flex');
+    }
+
+    // 選択肢1: 一時中断してホームへ戻る（後で再開可能）
+    function handlePauseWorkoutAndGoHome() {
+      setElementVisible($id('workoutBackModal'), false);
+      if (state.activeSession) {
+        // 最新の入力値を同期保存
+        var dtInput = $id('workoutDateTimeInput');
+        var gymInput = $id('gymNameInput');
+        var exInput = $id('exerciseNameInput');
+        if (dtInput && dtInput.value) state.activeSession.dateTime = dtInput.value;
+        if (gymInput) state.activeSession.gymName = gymInput.value.trim();
+        if (exInput) state.activeSession.currentExerciseName = exInput.value;
+        saveActiveSession();
+      }
+      clearInterval(stopwatchInterval);
+      switchView('home');
+      showToast('ワークアウトを一時中断しました（ホームから再開できます）', 'info');
+    }
+
+    // 選択肢2: 記録を破棄してホームへ戻る
+    function handleDiscardWorkoutAndGoHome() {
+      setElementVisible($id('workoutBackModal'), false);
+      state.activeSession = null;
+      saveActiveSession();
+      resetStopwatchToZero(false);
+      switchView('home');
+      showToast('進行中のワークアウト記録を破棄してホームへ戻りました', 'info');
+    }
+
+    /**
+     * ============================================================================
+     * 7. 集計・分析ロジック（種目別統計 / これまでの最大重量 / 前回・前々回 / PR判定）
+     * ============================================================================
+     */
+    function calculateExerciseStatsMap() {
+      var map = new Map();
+      var sortedWorkouts = state.workouts.slice().sort(function (a, b) {
+        return (a.dateTime || '').localeCompare(b.dateTime || '');
+      });
+
+      sortedWorkouts.forEach(function (workout) {
+        (workout.exercises || []).forEach(function (ex) {
+          var canonical = normalizeExerciseName(ex.name);
+          if (!canonical || !ex.sets || ex.sets.length === 0) return;
+
+          if (!map.has(canonical)) {
+            map.set(canonical, {
+              name: canonical,
+              maxWeight: 0,
+              totalWeight: 0,
+              totalReps: 0,
+              totalSets: 0,
+              sessionCount: 0,
+              lastDate: '',
+              gyms: new Set(),
+              sessions: []
+            });
+          }
+
+          var stat = map.get(canonical);
+          stat.sessionCount += 1;
+
+          ex.sets.forEach(function (s) {
+            var w = Number(s.weight) || 0;
+            var r = Number(s.reps) || 0;
+            if (w > stat.maxWeight) stat.maxWeight = w;
+            stat.totalWeight += w;
+            stat.totalReps += r;
+            stat.totalSets += 1;
+          });
+
+          stat.lastDate = workout.dateTime;
+          if (workout.gymName) {
+            stat.gyms.add(workout.gymName);
+          }
+          stat.sessions.push({
+            workoutId: workout.id,
+            dateTime: workout.dateTime,
+            gymName: workout.gymName || '場所未設定',
+            sets: ex.sets
+          });
+        });
+      });
+
+      map.forEach(function (stat) {
+        stat.avgWeight = stat.totalSets > 0 ? (stat.totalWeight / stat.totalSets) : 0;
+        stat.avgReps = stat.totalSets > 0 ? (stat.totalReps / stat.totalSets) : 0;
+        stat.gymList = Array.from(stat.gyms);
+        stat.sessions.reverse();
+      });
+
+      return map;
+    }
+
+    // 過去全期間における最大重量（自己ベスト）とその時の回数・達成日を取得
+    function getAllTimeBestRecord(exerciseName) {
+      var canonical = normalizeExerciseName(exerciseName);
+      if (!canonical) return null;
+
+      var best = null;
+      var sorted = state.workouts.slice().sort(function (a, b) {
+        return (b.dateTime || '').localeCompare(a.dateTime || '');
+      });
+
+      sorted.forEach(function (workout) {
+        (workout.exercises || []).forEach(function (ex) {
+          if (normalizeExerciseName(ex.name) === canonical && ex.sets && ex.sets.length > 0) {
+            ex.sets.forEach(function (s) {
+              var w = Number(s.weight) || 0;
+              var r = Number(s.reps) || 0;
+              if (!best || w > best.weight || (w === best.weight && r > best.reps)) {
+                best = {
+                  weight: w,
+                  reps: r,
+                  dateTime: workout.dateTime,
+                  gymName: workout.gymName || 'ジム'
+                };
+              }
+            });
+          }
+        });
+      });
+
+      return best;
+    }
+
+    // 直近2回分（前回・前々回）の該当種目セッションを取得
+    function getPreviousTwoSessions(exerciseName) {
+      var canonical = normalizeExerciseName(exerciseName);
+      if (!canonical) return [];
+
+      var matched = [];
+      var sorted = state.workouts.slice().sort(function (a, b) {
+        return (b.dateTime || '').localeCompare(a.dateTime || '');
+      });
+
+      for (var i = 0; i < sorted.length; i++) {
+        var workout = sorted[i];
+        var foundEx = (workout.exercises || []).find(function (e) {
+          return normalizeExerciseName(e.name) === canonical && e.sets && e.sets.length > 0;
+        });
+        if (foundEx) {
+          matched.push({
+            dateTime: workout.dateTime,
+            gymName: workout.gymName,
+            sets: foundEx.sets
+          });
+          if (matched.length >= 2) break;
+        }
+      }
+      return matched;
+    }
+
+    // 特定ワークアウトを除く過去最高重量を取得（PR更新判定用）
+    function getPreviousAllTimeMaxWeight(exerciseName, excludeWorkoutId) {
+      var canonical = normalizeExerciseName(exerciseName);
+      if (!canonical) return null;
+
+      var foundAny = false;
+      var maxW = 0;
+
+      state.workouts.forEach(function (workout) {
+        if (excludeWorkoutId && workout.id === excludeWorkoutId) return;
+        (workout.exercises || []).forEach(function (ex) {
+          if (normalizeExerciseName(ex.name) === canonical && ex.sets && ex.sets.length > 0) {
+            ex.sets.forEach(function (s) {
+              var w = Number(s.weight) || 0;
+              if (!foundAny || w > maxW) {
+                maxW = w;
+                foundAny = true;
+              }
+            });
+          }
+        });
+      });
+
+      return foundAny ? maxW : null;
+    }
+
+    /**
+     * ============================================================================
+     * 8. ホーム画面描画（BIG3 + 懸垂 2x2 / 種目別記録一覧 / ワークアウト履歴）
+     * ============================================================================
+     */
+    function renderHomeScreen() {
+      var statsMap = calculateExerciseStatsMap();
+
+      // 1. 進行中ワークアウト再開バナー
+      var resumeBanner = $id('resumeBanner');
+      if (state.activeSession) {
+        var completedCount = (state.activeSession.completedExercises || []).length;
+        var currentSetsCount = (state.activeSession.currentSets || []).length;
+        var gymLabel = state.activeSession.gymName ? ' @ ' + state.activeSession.gymName : '';
+        var detailEl = $id('resumeBannerDetail');
+        if (detailEl) {
+          detailEl.textContent = formatDisplayDateTime(state.activeSession.dateTime) + gymLabel + '（完了 ' + completedCount + '種目 / 入力中 ' + currentSetsCount + 'セット）';
+        }
+        setElementVisible(resumeBanner, true, 'block');
+      } else {
+        setElementVisible(resumeBanner, false);
+      }
+
+      // 2. サマリーテキスト
+      var summaryLine = $id('homeSummaryLine');
+      if (summaryLine) {
+        summaryLine.textContent = '累計ワークアウト: ' + state.workouts.length + '回 / 記録種目: ' + statsMap.size + '種目';
+      }
+
+      // 3. BIG3 + 懸垂 2x2 ダッシュボード
+      var big4Grid = $id('big4Grid');
+      if (big4Grid) {
+        big4Grid.innerHTML = '';
+
+        BIG4_EXERCISES.forEach(function (item) {
+          var stat = statsMap.get(item.name);
+          var isExpanded = Boolean(state.expandedBig4[item.name]);
+          var maxDisplay = stat
+            ? stat.maxWeight + '<span class="text-xs font-semibold text-slate-400 ml-0.5">kg</span>'
+            : '<span class="text-slate-600">--</span>';
+          var avgRepsDisplay = stat
+            ? stat.avgReps.toFixed(1) + '<span class="text-xs font-normal text-slate-400 ml-0.5">回</span>'
+            : '--';
+          var lastDateDisplay = stat ? formatShortDate(stat.lastDate) : '未記録';
+
+          var cardWrapper = document.createElement('div');
+          cardWrapper.className = 'rounded-3xl app-card border ' + (isExpanded ? 'border-[#10b981]' : 'hover:border-slate-500') + ' transition shadow-md overflow-hidden flex flex-col';
+
+          var toggleBtn = document.createElement('button');
+          toggleBtn.type = 'button';
+          toggleBtn.className = 'w-full text-left p-3.5 sm:p-4 active:bg-slate-800/70 transition flex flex-col justify-between cursor-pointer';
+          toggleBtn.innerHTML =
+            '<div>' +
+              '<div class="flex items-center justify-between gap-1 mb-1.5">' +
+                '<span class="text-[10px] font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#0b0f19] border border-[#23304a]" style="color:' + item.accent + '">' + item.badge + '</span>' +
+                '<span class="text-[10px] text-slate-400 flex items-center gap-1">' +
+                  '<span>' + lastDateDisplay + '</span>' +
+                  '<span>' + (isExpanded ? '▲' : '▼') + '</span>' +
+                '</span>' +
+              '</div>' +
+              '<div class="font-extrabold text-sm text-white leading-snug">' + escapeHtml(item.name) + '</div>' +
+            '</div>' +
+            '<div class="mt-3 pt-2.5 border-t border-[#23304a] flex items-end justify-between">' +
+              '<div>' +
+                '<div class="text-[10px] font-semibold text-slate-400">最大重量</div>' +
+                '<div class="font-mono-num text-lg sm:text-xl font-extrabold text-white leading-none mt-0.5">' + maxDisplay + '</div>' +
+              '</div>' +
+              '<div class="text-right">' +
+                '<div class="text-[10px] font-semibold text-slate-400">平均回数</div>' +
+                '<div class="font-mono-num text-xs sm:text-sm font-bold text-[#10b981] mt-0.5">' + avgRepsDisplay + '</div>' +
+              '</div>' +
+            '</div>';
+
+          var historyDrawer = document.createElement('div');
+          historyDrawer.className = 'px-3.5 pb-3.5 pt-2.5 border-t border-[#23304a] bg-[#0b0f19] space-y-2 animate-fade-in';
+          historyDrawer.style.display = isExpanded ? 'block' : 'none';
+
+          if (stat && stat.sessions.length > 0) {
+            var sessHtml = stat.sessions.slice(0, 6).map(function (sess) {
+              var chips = sess.sets.map(function (s) {
+                return '<span class="inline-block font-mono-num text-[10px] bg-[#131b2e] border border-[#23304a] text-slate-200 px-1.5 py-0.5 rounded">' + s.weight + 'kg×' + s.reps + '</span>';
+              }).join(' ');
+              return (
+                '<div class="text-xs py-1 border-b border-[#23304a]/60 last:border-b-0 space-y-1">' +
+                  '<div class="flex items-center justify-between text-[10px] text-slate-400">' +
+                    '<span class="font-bold text-slate-300">' + formatShortDate(sess.dateTime) + '</span>' +
+                    '<span class="truncate max-w-[100px]">@ ' + escapeHtml(sess.gymName) + '</span>' +
+                  '</div>' +
+                  '<div class="flex flex-wrap gap-1">' + chips + '</div>' +
+                '</div>'
+              );
+            }).join('');
+
+            historyDrawer.innerHTML =
+              '<div class="text-[10px] font-bold text-slate-400">過去の実施履歴</div>' +
+              sessHtml;
+          } else {
+            historyDrawer.innerHTML = '<div class="text-[11px] text-slate-500 py-2 text-center">まだ記録がありません</div>';
+          }
+
+          toggleBtn.addEventListener('click', function () {
+            state.expandedBig4[item.name] = !state.expandedBig4[item.name];
+            renderHomeScreen();
+          });
+
+          cardWrapper.appendChild(toggleBtn);
+          cardWrapper.appendChild(historyDrawer);
+          big4Grid.appendChild(cardWrapper);
+        });
+      }
+
+      // 4. 種目別記録一覧を描画
+      var filterInput = $id('homeExerciseFilterInput');
+      var filterText = filterInput ? filterInput.value.trim() : '';
+      renderExerciseStatsList(statsMap, filterText);
+
+      // 5. 過去のワークアウト履歴一覧を描画
+      renderWorkoutHistoryList();
+    }
+
+    function renderExerciseStatsList(statsMap, filterQuery) {
+      var container = $id('exerciseStatsList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      var entries = Array.from(statsMap.values());
+
+      if (filterQuery) {
+        var q = filterQuery.toLowerCase();
+        entries = entries.filter(function (e) {
+          return e.name.toLowerCase().includes(q) ||
+            (e.gymList && e.gymList.some(function (g) { return g.toLowerCase().includes(q); }));
+        });
+      }
+
+      entries.sort(function (a, b) {
+        return (b.lastDate || '').localeCompare(a.lastDate || '');
+      });
+
+      if (entries.length === 0) {
+        container.innerHTML =
+          '<div class="text-center py-7 rounded-2xl border border-dashed border-[#23304a] text-xs text-slate-400">' +
+            (filterQuery ? '一致する種目記録がありません。' : 'トレーニングを記録すると、ここに全種目の最大重量・平均回数・直近実施日・履歴が表示されます。') +
+          '</div>';
+        return;
+      }
+
+      entries.forEach(function (stat) {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'rounded-2xl app-subcard border overflow-hidden';
+
+        var gymsText = stat.gymList && stat.gymList.length > 0 ? stat.gymList.slice(0, 2).join(' / ') : '施設未設定';
+
+        var headerBtn = document.createElement('button');
+        headerBtn.type = 'button';
+        headerBtn.className = 'w-full text-left p-3.5 flex items-center justify-between gap-2 hover:bg-slate-900/80 transition cursor-pointer';
+        headerBtn.innerHTML =
+          '<div class="min-w-0 flex-1">' +
+            '<div class="font-extrabold text-sm text-white truncate">' + escapeHtml(stat.name) + '</div>' +
+            '<div class="text-[11px] text-slate-400 mt-0.5 truncate">' +
+              '直近 ' + formatShortDate(stat.lastDate) + ' • ' + stat.sessionCount + '回 • 📍 ' + escapeHtml(gymsText) +
+            '</div>' +
+          '</div>' +
+          '<div class="flex items-center gap-3.5 text-right shrink-0">' +
+            '<div>' +
+              '<div class="text-[10px] text-slate-400">最大重量</div>' +
+              '<div class="font-mono-num text-sm sm:text-base font-extrabold text-[#f59e0b]">' + stat.maxWeight + 'kg</div>' +
+            '</div>' +
+            '<div>' +
+              '<div class="text-[10px] text-slate-400">平均回数</div>' +
+              '<div class="font-mono-num text-xs sm:text-sm font-bold text-[#10b981]">' + stat.avgReps.toFixed(1) + '回</div>' +
+            '</div>' +
+          '</div>';
+
+        var detailPanel = document.createElement('div');
+        detailPanel.className = 'px-3.5 pb-3.5 pt-2 border-t border-[#23304a] bg-[#131b2e]/60 space-y-2';
+        detailPanel.style.display = filterQuery ? 'block' : 'none';
+
+        detailPanel.innerHTML = stat.sessions.slice(0, 10).map(function (sess) {
+          var setsChips = sess.sets.map(function (s) {
+            return '<span class="inline-block font-mono-num text-[11px] bg-[#0b0f19] border border-[#23304a] text-slate-200 px-2 py-0.5 rounded-md">' + s.weight + 'kg×' + s.reps + '</span>';
+          }).join(' ');
+          return (
+            '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs py-1.5 border-b border-[#23304a]/60 last:border-b-0">' +
+              '<div class="text-slate-400 font-medium">' +
+                '<span class="text-slate-200 font-bold">' + formatShortDate(sess.dateTime) + '</span>' +
+                '<span class="ml-1.5 text-slate-500">@ ' + escapeHtml(sess.gymName) + '</span>' +
+              '</div>' +
+              '<div class="flex flex-wrap gap-1">' + setsChips + '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        headerBtn.addEventListener('click', function () {
+          detailPanel.style.display = detailPanel.style.display === 'none' ? 'block' : 'none';
+        });
+
+        wrapper.appendChild(headerBtn);
+        wrapper.appendChild(detailPanel);
+        container.appendChild(wrapper);
+      });
+    }
+
+    function renderWorkoutHistoryList() {
+      var container = $id('workoutHistoryList');
+      var countBadge = $id('sessionCountBadge');
+      if (!container) return;
+      container.innerHTML = '';
+
+      var sorted = state.workouts.slice().sort(function (a, b) {
+        return (b.dateTime || '').localeCompare(a.dateTime || '');
+      });
+      if (countBadge) countBadge.textContent = sorted.length + '件';
+
+      if (sorted.length === 0) {
+        container.innerHTML =
+          '<div class="text-center py-6 rounded-2xl border border-dashed border-[#23304a] text-xs text-slate-400">' +
+            '完了したワークアウト履歴はここに保存されます。' +
+          '</div>';
+        return;
+      }
+
+      sorted.forEach(function (workout) {
+        var totalSets = (workout.exercises || []).reduce(function (acc, ex) {
+          return acc + (ex.sets ? ex.sets.length : 0);
+        }, 0);
+
+        var card = document.createElement('div');
+        card.className = 'rounded-2xl app-subcard border p-3.5 space-y-2.5';
+
+        var exSummaryHtml = (workout.exercises || []).map(function (ex) {
+          var maxW = Math.max.apply(null, ex.sets.map(function (s) { return Number(s.weight) || 0; }));
+          var setsText = ex.sets.map(function (s) { return s.weight + 'kg×' + s.reps; }).join(', ');
+          return (
+            '<div class="text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-[#131b2e] border border-[#23304a]/80 rounded-xl px-3 py-2">' +
+              '<div class="font-bold text-slate-100">' + escapeHtml(ex.name) + ' <span class="text-[#38bdf8] font-mono-num ml-1">(MAX ' + maxW + 'kg)</span></div>' +
+              '<div class="font-mono-num text-slate-400 text-[11px]">' + setsText + '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        card.innerHTML =
+          '<div class="flex items-start justify-between gap-2">' +
+            '<div>' +
+              '<div class="font-extrabold text-sm text-white">' + formatDisplayDateTime(workout.dateTime) + '</div>' +
+              '<div class="text-xs text-[#10b981] mt-0.5 flex items-center gap-1">' +
+                '<span>📍</span> ' + escapeHtml(workout.gymName || 'ジム名未設定') +
+                '<span class="text-slate-400 ml-1">(' + (workout.exercises || []).length + '種目 / ' + totalSets + 'セット)</span>' +
+              '</div>' +
+            '</div>' +
+            '<button type="button" data-delete-workout="' + escapeHtml(workout.id) + '" class="text-xs font-bold text-slate-400 hover:text-[#ef4444] px-2.5 py-1 rounded-lg hover:bg-[#ef4444]/15 transition cursor-pointer">' +
+              '削除' +
+            '</button>' +
+          '</div>' +
+          '<div class="space-y-1.5 pt-1">' + exSummaryHtml + '</div>';
+
+        var delBtn = card.querySelector('[data-delete-workout]');
+        if (delBtn) {
+          delBtn.addEventListener('click', async function () {
+            var ok = await showConfirmModal(
+              'ワークアウト履歴の削除',
+              formatDisplayDateTime(workout.dateTime) + ' の記録を削除しますか？この操作は取り消せません。',
+              '削除する',
+              true
+            );
+            if (ok) {
+              state.workouts = state.workouts.filter(function (w) { return w.id !== workout.id; });
+              saveWorkouts();
+              renderHomeScreen();
+              showToast('履歴を削除しました', 'info');
+            }
+          });
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 9. 記録画面（ワークアウト開始・GPS逆ジオコーディング・確定非表示・種目入力）
+     * ============================================================================
+     */
+    function populateWeightAndRepDropdowns() {
+      var weightSelect = $id('weightSelect');
+      var repsSelect = $id('repsSelect');
+
+      if (weightSelect) {
+        var weightOptions = '';
+        for (var w = 0; w <= 500; w += 2.5) {
+          var label = Number.isInteger(w) ? (w + ' kg') : (w.toFixed(1) + ' kg');
+          var selected = w === 20 ? 'selected' : '';
+          weightOptions += '<option value="' + w + '" ' + selected + '>' + label + '</option>';
+        }
+        weightSelect.innerHTML = weightOptions;
+      }
+
+      if (repsSelect) {
+        var repOptions = '';
+        for (var r = 0; r <= 100; r += 1) {
+          var selRep = r === 10 ? 'selected' : '';
+          repOptions += '<option value="' + r + '" ' + selRep + '>' + r + ' 回</option>';
+        }
+        repsSelect.innerHTML = repOptions;
+      }
+    }
+
+    // ワークアウト開始（最優先で同期的にホーム画面から記録画面へ即時遷移する）
+    function startNewWorkout() {
+      state.activeSession = {
+        id: 'wk_' + Date.now(),
+        dateTime: getCurrentLocalDateTimeString(),
+        gymName: '',
+        locationConfirmed: false,
+        completedExercises: [],
+        currentExerciseName: '',
+        currentSets: []
+      };
+
+      // 1. 最優先：同期処理でホーム画面から記録画面へ即時切り替え
+      switchView('workout');
+
+      // 2. タイマーリセット & 自動保存
+      try {
+        resetStopwatchToZero(false);
+        saveActiveSession();
+      } catch (e) {}
+
+      // 3. 非同期で現在地からジム・施設名取得
+      setTimeout(function () {
+        detectCurrentLocationGym();
+      }, 50);
+    }
+
+    // 進行中ワークアウト再開
+    function resumeExistingWorkout() {
+      if (!state.activeSession) {
+        startNewWorkout();
+        return;
+      }
+
+      switchView('workout');
+
+      try {
+        if (state.activeSession.swState) {
+          var savedSw = state.activeSession.swState;
+          if (savedSw.isRunning && savedSw.startTime) {
+            swState.startTime = savedSw.startTime;
+            swState.isRunning = true;
+            clearInterval(stopwatchInterval);
+            stopwatchInterval = setInterval(updateStopwatchUI, 250);
+          } else {
+            swState.isRunning = false;
+            swState.elapsedMs = savedSw.elapsedMs || 0;
+          }
+          updateStopwatchUI();
+        } else {
+          resetStopwatchToZero(false);
+        }
+      } catch (e) {}
+
+      if (!state.activeSession.gymName && !state.activeSession.locationConfirmed) {
+        setTimeout(function () {
+          detectCurrentLocationGym();
+        }, 50);
+      }
+    }
+
+    // 日時・場所の入力確定＆ワークアウト終了まで非表示化
+    function confirmSessionLocation(silent) {
+      if (!state.activeSession) return;
+
+      var dtInput = $id('workoutDateTimeInput');
+      var gymInput = $id('gymNameInput');
+
+      if (dtInput && dtInput.value) {
+        state.activeSession.dateTime = dtInput.value;
+      }
+      if (gymInput) {
+        state.activeSession.gymName = gymInput.value.trim();
+      }
+
+      if (!state.activeSession.locationConfirmed) {
+        state.activeSession.locationConfirmed = true;
+        saveActiveSession();
+        if (!silent) {
+          showToast('日時・場所を確定しました（ワークアウト終了まで非表示になります）', 'info');
+        }
+      } else {
+        saveActiveSession();
+      }
+
+      setElementVisible($id('sessionSetupCard'), false);
+    }
+
+    function renderWorkoutScreen() {
+      if (!state.activeSession) return;
+
+      var dtInput = $id('workoutDateTimeInput');
+      var gymInput = $id('gymNameInput');
+      var exInput = $id('exerciseNameInput');
+      var isLocationConfirmed = Boolean(state.activeSession.locationConfirmed);
+
+      if (dtInput) dtInput.value = state.activeSession.dateTime || getCurrentLocalDateTimeString();
+      if (gymInput) gymInput.value = state.activeSession.gymName || '';
+      if (exInput) exInput.value = state.activeSession.currentExerciseName || '';
+
+      setElementVisible($id('sessionSetupCard'), !isLocationConfirmed, 'block');
+      if (!isLocationConfirmed) {
+        renderGymSuggestions();
+      }
+
+      renderCompletedTodaySummary();
+      updatePreviousRecordsPanel(state.activeSession.currentExerciseName || '');
+      renderCurrentSetsList();
+    }
+
+    function detectCurrentLocationGym() {
+      var geoStatus = $id('geoStatusText');
+      var gymInput = $id('gymNameInput');
+
+      try {
+        if (typeof navigator === 'undefined' || !('geolocation' in navigator) || !navigator.geolocation) {
+          if (geoStatus) geoStatus.textContent = '位置情報非対応（手動入力可）';
+          renderGymSuggestions();
+          return;
+        }
+
+        if (geoStatus) geoStatus.textContent = '現在地を取得中...';
+
+        navigator.geolocation.getCurrentPosition(
+          async function (position) {
+            try {
+              var lat = position.coords.latitude;
+              var lon = position.coords.longitude;
+              if (geoStatus) geoStatus.textContent = '周辺施設を検索中...';
+
+              var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+              var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 6000) : null;
+
+              var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' +
+                encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon) +
+                '&zoom=18&addressdetails=1&accept-language=ja';
+
+              var response = await fetch(url, {
+                signal: controller ? controller.signal : undefined,
+                headers: { 'Accept': 'application/json' }
+              });
+              if (timeoutId) clearTimeout(timeoutId);
+
+              if (!response.ok) throw new Error('Reverse geocoding error');
+              var data = await response.json();
+
+              var candidates = [];
+              var addr = data.address || {};
+
+              if (data.name && data.name.trim()) {
+                candidates.push(data.name.trim());
+              }
+              ['leisure', 'amenity', 'building', 'shop', 'office', 'club'].forEach(function (k) {
+                if (addr[k] && candidates.indexOf(addr[k]) === -1) {
+                  candidates.push(addr[k]);
+                }
+              });
+
+              var areaParts = [
+                addr.city || addr.town || addr.ward || '',
+                addr.suburb || addr.neighbourhood || addr.quarter || ''
+              ].filter(Boolean);
+
+              if (areaParts.length > 0) {
+                var areaLabel = areaParts.join('');
+                if (candidates.indexOf(areaLabel) === -1) candidates.push(areaLabel);
+              }
+
+              detectedLocationSuggestions = candidates;
+
+              if (candidates.length > 0) {
+                if (geoStatus) geoStatus.textContent = '現在地から候補を取得しました';
+                if (gymInput && !gymInput.value.trim()) {
+                  gymInput.value = candidates[0];
+                  if (state.activeSession) {
+                    state.activeSession.gymName = candidates[0];
+                    saveActiveSession();
+                  }
+                }
+              } else {
+                if (geoStatus) geoStatus.textContent = '建物特定不可（任意入力可）';
+              }
+
+              renderGymSuggestions();
+            } catch (err) {
+              if (geoStatus) geoStatus.textContent = '施設名取得不可（手動入力可）';
+              renderGymSuggestions();
+            }
+          },
+          function () {
+            if (geoStatus) geoStatus.textContent = '位置情報オフ（任意入力可）';
+            renderGymSuggestions();
+          },
+          { enableHighAccuracy: true, timeout: 6500, maximumAge: 60000 }
+        );
+      } catch (e) {
+        if (geoStatus) geoStatus.textContent = '任意入力可';
+        renderGymSuggestions();
+      }
+    }
+
+    function renderGymSuggestions() {
+      var container = $id('gymSuggestionsContainer');
+      var list = $id('gymSuggestionsList');
+      if (!container || !list) return;
+      list.innerHTML = '';
+
+      var combined = Array.from(new Set(detectedLocationSuggestions.concat(state.gymHistory))).slice(0, 6);
+      if (combined.length === 0) {
+        setElementVisible(container, false);
+        return;
+      }
+
+      setElementVisible(container, true, 'flex');
+      combined.forEach(function (gym) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-xs bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] hover:border-[#38bdf8] text-slate-200 px-2.5 py-1 rounded-lg transition cursor-pointer';
+        btn.textContent = gym;
+        btn.addEventListener('click', function () {
+          var gymInput = $id('gymNameInput');
+          if (gymInput) gymInput.value = gym;
+          if (state.activeSession) {
+            state.activeSession.gymName = gym;
+            saveActiveSession();
+          }
+        });
+        list.appendChild(btn);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 10. インターバル用ストップウォッチ（MM:SS / 開始・繰り返し・停止の3ボタンのみ）
+     * ============================================================================
+     */
+    function formatStopwatchTime(ms) {
+      var totalSeconds = Math.floor(ms / 1000);
+      var minutes = Math.floor(totalSeconds / 60);
+      var seconds = totalSeconds % 60;
+      return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    function updateStopwatchUI() {
+      var displayEl = $id('stopwatchDisplay');
+      var dot = $id('timerDot');
+      var currentMs = swState.isRunning ? (Date.now() - swState.startTime) : swState.elapsedMs;
+
+      if (displayEl) displayEl.textContent = formatStopwatchTime(currentMs);
+      if (dot) {
+        if (swState.isRunning) {
+          dot.className = 'w-2 h-2 rounded-full bg-[#10b981] animate-ping';
+        } else if (currentMs > 0) {
+          dot.className = 'w-2 h-2 rounded-full bg-[#f59e0b]';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        }
+      }
+    }
+
+    function startStopwatch() {
+      if (swState.isRunning) return;
+      swState.startTime = Date.now() - swState.elapsedMs;
+      swState.isRunning = true;
+      updateStopwatchUI();
+
+      clearInterval(stopwatchInterval);
+      stopwatchInterval = setInterval(updateStopwatchUI, 250);
+    }
+
+    function repeatStopwatch() {
+      swState.elapsedMs = 0;
+      swState.startTime = Date.now();
+      swState.isRunning = true;
+      updateStopwatchUI();
+
+      clearInterval(stopwatchInterval);
+      stopwatchInterval = setInterval(updateStopwatchUI, 250);
+    }
+
+    function stopStopwatch() {
+      if (swState.isRunning) {
+        swState.elapsedMs = Date.now() - swState.startTime;
+        swState.isRunning = false;
+      }
+      clearInterval(stopwatchInterval);
+      updateStopwatchUI();
+    }
+
+    function resetStopwatchToZero(autoStart) {
+      clearInterval(stopwatchInterval);
+      swState.elapsedMs = 0;
+      swState.isRunning = false;
+      updateStopwatchUI();
+      if (autoStart) startStopwatch();
+    }
+
+    /**
+     * ============================================================================
+     * 11. 種目の予測変換＆過去記録リファレンス（これまでの最大重量 ＋ 前回 ＋ 前々回）
+     * ============================================================================
+     */
+    function getAllAvailableExercises() {
+      var masterNames = new Set(MASTER_EXERCISES.map(function (m) { return m.name; }));
+      var customObjs = state.customExercises
+        .filter(function (name) { return !masterNames.has(name); })
+        .map(function (name) { return { name: name, category: 'カスタム', keywords: name.toLowerCase() }; });
+
+      return customObjs.concat(MASTER_EXERCISES);
+    }
+
+    function renderExerciseAutocomplete(query) {
+      var dropdown = $id('exerciseAutocompleteDropdown');
+      if (!dropdown) return;
+      var q = (query || '').trim().toLowerCase();
+
+      if (!q) {
+        setElementVisible(dropdown, false);
+        return;
+      }
+
+      var all = getAllAvailableExercises();
+      var matches = all.filter(function (item) {
+        return item.name.toLowerCase().includes(q) || (item.keywords && item.keywords.toLowerCase().includes(q));
+      }).slice(0, 15);
+
+      if (matches.length === 0) {
+        dropdown.innerHTML =
+          '<div class="px-4 py-3 text-xs text-slate-300">' +
+            '候補にありません。そのまま「<span class="text-white font-extrabold">' + escapeHtml(query.trim()) + '</span>」として手動記録できます。' +
+          '</div>';
+        setElementVisible(dropdown, true, 'block');
+        return;
+      }
+
+      dropdown.innerHTML = '';
+      matches.forEach(function (item) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'w-full text-left px-4 py-3 hover:bg-slate-800 flex items-center justify-between gap-2 transition cursor-pointer';
+        row.innerHTML =
+          '<span class="font-bold text-sm text-white">' + escapeHtml(item.name) + '</span>' +
+          '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#0b0f19] text-[#38bdf8] border border-[#23304a]">' + escapeHtml(item.category) + '</span>';
+        row.addEventListener('click', function () {
+          selectExerciseName(item.name);
+          setElementVisible(dropdown, false);
+        });
+        dropdown.appendChild(row);
+      });
+
+      setElementVisible(dropdown, true, 'block');
+    }
+
+    function selectExerciseName(name) {
+      var normalized = normalizeExerciseName(name);
+      var input = $id('exerciseNameInput');
+      if (input) input.value = normalized;
+
+      if (state.activeSession) {
+        state.activeSession.currentExerciseName = normalized;
+        saveActiveSession();
+      }
+
+      updatePreviousRecordsPanel(normalized);
+    }
+
+    function updatePreviousRecordsPanel(exerciseName) {
+      var content = $id('previousRecordsContent');
+      if (!content) return;
+      var canonical = normalizeExerciseName(exerciseName);
+
+      if (!canonical) {
+        content.innerHTML = '<span class="text-slate-400">種目を選択または入力すると、これまでの最大重量・前回・前々回の記録が表示されます。</span>';
+        return;
+      }
+
+      var allTimeBest = getAllTimeBestRecord(canonical);
+      var prevSessions = getPreviousTwoSessions(canonical);
+
+      if (!allTimeBest && prevSessions.length === 0) {
+        content.innerHTML = '<span class="text-slate-300">この種目の過去記録はまだありません</span>';
+        return;
+      }
+
+      var htmlParts = [];
+
+      // 1. これまでの最大重量（ALL-TIME MAX / 自己ベスト）をゴールド／アンバー強調バッジで最上部に大きく表示
+      if (allTimeBest) {
+        htmlParts.push(
+          '<button type="button" data-fill-weight="' + allTimeBest.weight + '" data-fill-reps="' + allTimeBest.reps + '" class="fill-prev-set-btn w-full text-left rounded-xl bg-gradient-to-r from-[#f59e0b]/25 via-[#f59e0b]/15 to-[#131b2e] hover:from-[#f59e0b]/35 border border-[#f59e0b]/70 px-3.5 py-2.5 flex items-center justify-between gap-2 transition cursor-pointer shadow-sm">' +
+            '<div class="min-w-0">' +
+              '<div class="flex items-center gap-1.5">' +
+                '<span class="inline-flex items-center px-2 py-0.5 rounded-md bg-[#f59e0b] text-slate-950 text-[10px] font-extrabold tracking-wide">ALL-TIME MAX</span>' +
+                '<span class="text-[11px] font-extrabold text-[#f59e0b]">これまでの最大重量</span>' +
+              '</div>' +
+              '<div class="font-mono-num text-sm sm:text-base font-extrabold text-white mt-1">' +
+                '🏆 ' + allTimeBest.weight + ' kg × ' + allTimeBest.reps + '回 ' +
+                '<span class="text-[11px] font-sans font-normal text-amber-200/80">(' + formatShortDate(allTimeBest.dateTime) + ')</span>' +
+              '</div>' +
+            '</div>' +
+            '<span class="shrink-0 text-[10px] font-bold text-[#f59e0b] bg-[#0b0f19]/80 border border-[#f59e0b]/40 px-2 py-1 rounded-lg">コピー</span>' +
+          '</button>'
+        );
+      }
+
+      // 2. 前回（直近の記録）＆ 3. 前々回（2回前の記録）
+      var labels = ['前回', '前々回'];
+      prevSessions.forEach(function (sess, idx) {
+        var chipsHtml = sess.sets.map(function (s) {
+          return (
+            '<button type="button" data-fill-weight="' + s.weight + '" data-fill-reps="' + s.reps + '" class="fill-prev-set-btn font-mono-num text-xs bg-[#131b2e] hover:bg-slate-800 border border-[#23304a] hover:border-[#38bdf8] text-slate-100 px-2.5 py-1 rounded-lg transition cursor-pointer">' +
+              s.weight + 'kg × ' + s.reps + '回' +
+            '</button>'
+          );
+        }).join(' ');
+
+        htmlParts.push(
+          '<div class="pt-1">' +
+            '<div class="flex items-center gap-2 mb-1">' +
+              '<span class="text-[11px] font-extrabold px-2 py-0.5 rounded bg-[#38bdf8]/20 text-[#38bdf8]">' + labels[idx] + '</span>' +
+              '<span class="text-[11px] text-slate-400">' + formatShortDate(sess.dateTime) + ' @ ' + escapeHtml(sess.gymName || 'ジム') + '</span>' +
+            '</div>' +
+            '<div class="flex flex-wrap gap-1.5">' + chipsHtml + '</div>' +
+          '</div>'
+        );
+      });
+
+      content.innerHTML = '<div class="space-y-2">' + htmlParts.join('') + '</div>';
+
+      // ワンタップコピーイベントをバインド
+      content.querySelectorAll('.fill-prev-set-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var w = btn.getAttribute('data-fill-weight');
+          var r = btn.getAttribute('data-fill-reps');
+          var weightSelect = $id('weightSelect');
+          var repsSelect = $id('repsSelect');
+          if (weightSelect) weightSelect.value = w;
+          if (repsSelect) repsSelect.value = r;
+          showToast(w + 'kg × ' + r + '回 を入力欄にコピーしました', 'info');
+        });
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 12. セット追加・削除 / 次の種目へ / ワークアウト終了
+     * ============================================================================
+     */
+    function handleAddSet() {
+      if (!state.activeSession) return;
+
+      // 最初のセット追加時に日時・場所カードを自動確定して終了まで非表示にする
+      if (!state.activeSession.locationConfirmed) {
+        confirmSessionLocation(true);
+      }
+
+      var exInput = $id('exerciseNameInput');
+      var weightSelect = $id('weightSelect');
+      var repsSelect = $id('repsSelect');
+
+      var currentName = normalizeExerciseName(exInput ? exInput.value : '');
+      if (!currentName) {
+        showToast('先に種目名を入力または選択してください', 'warning');
+        if (exInput) exInput.focus();
+        return;
+      }
+
+      var weight = weightSelect ? parseFloat(weightSelect.value) : 0;
+      var reps = repsSelect ? parseInt(repsSelect.value, 10) : 0;
+      if (isNaN(weight)) weight = 0;
+      if (isNaN(reps)) reps = 0;
+
+      var isMaster = MASTER_EXERCISES.some(function (m) { return m.name === currentName; });
+      if (!isMaster && state.customExercises.indexOf(currentName) === -1) {
+        state.customExercises.unshift(currentName);
+        saveCustomExercises();
+      }
+
+      state.activeSession.currentExerciseName = currentName;
+      if (!Array.isArray(state.activeSession.currentSets)) {
+        state.activeSession.currentSets = [];
+      }
+      state.activeSession.currentSets.push({ weight: weight, reps: reps });
+
+      saveActiveSession();
+      renderCurrentSetsList();
+      showToast(currentName + ': ' + weight + 'kg × ' + reps + '回 を追加しました', 'success');
+    }
+
+    function renderCurrentSetsList() {
+      var listEl = $id('currentSetsList');
+      var countEl = $id('currentSetCount');
+      var maxPreviewEl = $id('currentExerciseMaxPreview');
+      if (!listEl) return;
+
+      var sets = (state.activeSession && state.activeSession.currentSets) ? state.activeSession.currentSets : [];
+      if (countEl) countEl.textContent = String(sets.length);
+
+      if (sets.length === 0) {
+        if (maxPreviewEl) maxPreviewEl.textContent = '';
+        listEl.innerHTML =
+          '<div class="text-center py-5 rounded-2xl border border-dashed border-[#23304a] text-xs text-slate-400">' +
+            'まだセットが追加されていません。重量と回数を選んで「セットを追加」を押してください。' +
+          '</div>';
+        return;
+      }
+
+      var maxW = Math.max.apply(null, sets.map(function (s) { return Number(s.weight) || 0; }));
+      if (maxPreviewEl) maxPreviewEl.textContent = '現在MAX: ' + maxW + 'kg';
+
+      listEl.innerHTML = '';
+      sets.forEach(function (setObj, index) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center justify-between app-subcard border rounded-2xl px-4 py-3 animate-fade-in';
+        row.innerHTML =
+          '<div class="flex items-center gap-3">' +
+            '<span class="w-7 h-7 rounded-xl bg-[#38bdf8]/20 border border-[#38bdf8]/40 text-[#38bdf8] font-mono-num text-xs font-extrabold flex items-center justify-center">' +
+              (index + 1) +
+            '</span>' +
+            '<div class="font-mono-num text-base sm:text-lg font-extrabold text-white">' +
+              setObj.weight + '<span class="text-xs font-normal text-slate-400 ml-0.5">kg</span>' +
+              '<span class="mx-2 text-slate-600">×</span>' +
+              setObj.reps + '<span class="text-xs font-normal text-slate-400 ml-0.5">回</span>' +
+            '</div>' +
+          '</div>' +
+          '<button type="button" data-remove-set="' + index + '" class="text-xs font-bold text-slate-400 hover:text-[#ef4444] px-2.5 py-1.5 rounded-lg hover:bg-[#ef4444]/15 transition cursor-pointer">' +
+            '削除' +
+          '</button>';
+
+        var removeBtn = row.querySelector('[data-remove-set]');
+        if (removeBtn) {
+          removeBtn.addEventListener('click', function () {
+            state.activeSession.currentSets.splice(index, 1);
+            saveActiveSession();
+            renderCurrentSetsList();
+            showToast((index + 1) + 'セット目を削除しました', 'info');
+          });
+        }
+
+        listEl.appendChild(row);
+      });
+    }
+
+    function renderCompletedTodaySummary() {
+      var card = $id('completedTodayCard');
+      var countEl = $id('completedTodayCount');
+      var chipsEl = $id('completedTodayChips');
+      if (!card || !chipsEl) return;
+
+      var completed = (state.activeSession && state.activeSession.completedExercises) ? state.activeSession.completedExercises : [];
+      if (completed.length === 0) {
+        setElementVisible(card, false);
+        return;
+      }
+
+      setElementVisible(card, true, 'block');
+      if (countEl) countEl.textContent = String(completed.length);
+
+      chipsEl.innerHTML = completed.map(function (ex) {
+        var maxW = Math.max.apply(null, ex.sets.map(function (s) { return Number(s.weight) || 0; }));
+        return (
+          '<span class="inline-flex items-center gap-1.5 text-xs bg-[#0b0f19] border border-[#10b981]/50 text-emerald-200 px-2.5 py-1 rounded-xl font-bold">' +
+            '<span>' + escapeHtml(ex.name) + '</span>' +
+            '<span class="font-mono-num text-[11px] text-[#10b981]">(' + ex.sets.length + 'set / MAX ' + maxW + 'kg)</span>' +
+          '</span>'
+        );
+      }).join('');
+    }
+
+    function handleNextExercise() {
+      if (!state.activeSession) return;
+
+      var currentSets = state.activeSession.currentSets || [];
+      var exInput = $id('exerciseNameInput');
+      var currentName = normalizeExerciseName(exInput ? exInput.value : '');
+
+      if (currentSets.length === 0) {
+        showToast('現在の種目にまだセットが記録されていません。1セット以上追加してから次へ進んでください。', 'warning');
+        return;
+      }
+
+      if (!Array.isArray(state.activeSession.completedExercises)) {
+        state.activeSession.completedExercises = [];
+      }
+
+      state.activeSession.completedExercises.push({
+        name: currentName || '名称未設定種目',
+        sets: currentSets.slice()
+      });
+
+      confirmSessionLocation(true);
+
+      state.activeSession.currentExerciseName = '';
+      state.activeSession.currentSets = [];
+      saveActiveSession();
+
+      if (exInput) exInput.value = '';
+      renderCompletedTodaySummary();
+      updatePreviousRecordsPanel('');
+      renderCurrentSetsList();
+
+      showToast('「' + (currentName || '種目') + '」を保存しました。次の種目を入力してください！', 'success');
+      if (exInput) {
+        try { exInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        exInput.focus();
+      }
+    }
+
+    function handleFinishWorkout() {
+      if (!state.activeSession) return;
+
+      var finalExercises = (state.activeSession.completedExercises || []).slice();
+      var currentSets = state.activeSession.currentSets || [];
+      var exInput = $id('exerciseNameInput');
+      var currentName = normalizeExerciseName(exInput ? exInput.value : '');
+
+      if (currentSets.length > 0) {
+        finalExercises.push({
+          name: currentName || '名称未設定種目',
+          sets: currentSets.slice()
+        });
+      }
+
+      if (finalExercises.length === 0) {
+        showToast('記録されたセットが0件です。種目とセットを追加してから終了してください。', 'warning');
+        return;
+      }
+
+      var mergedMap = new Map();
+      finalExercises.forEach(function (ex) {
+        var key = normalizeExerciseName(ex.name);
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, { name: key, sets: [] });
+        }
+        var target = mergedMap.get(key);
+        ex.sets.forEach(function (s) { target.sets.push(s); });
+      });
+      var consolidatedExercises = Array.from(mergedMap.values());
+
+      var gymInput = $id('gymNameInput');
+      var dtInput = $id('workoutDateTimeInput');
+      var gymName = gymInput ? gymInput.value.trim() : (state.activeSession.gymName || '');
+      var dateTime = (dtInput && dtInput.value) ? dtInput.value : (state.activeSession.dateTime || getCurrentLocalDateTimeString());
+
+      if (gymName) {
+        state.gymHistory = [gymName].concat(state.gymHistory.filter(function (g) { return g !== gymName; })).slice(0, 12);
+        saveGymHistory();
+      }
+
+      var finishedWorkout = {
+        id: state.activeSession.id || ('wk_' + Date.now()),
+        dateTime: dateTime,
+        gymName: gymName || 'ジム名未設定',
+        exercises: consolidatedExercises
+      };
+
+      var resultBreakdown = consolidatedExercises.map(function (ex) {
+        var weights = ex.sets.map(function (s) { return Number(s.weight) || 0; });
+        var todayMaxWeight = Math.max.apply(null, weights);
+        var avgWeight = weights.reduce(function (a, b) { return a + b; }, 0) / weights.length;
+
+        var previousMax = getPreviousAllTimeMaxWeight(ex.name, finishedWorkout.id);
+        var isPR = false;
+        var prDiff = 0;
+        var isFirstRecord = false;
+
+        if (previousMax === null) {
+          if (todayMaxWeight > 0) {
+            isPR = true;
+            isFirstRecord = true;
+          }
+        } else if (todayMaxWeight > previousMax) {
+          isPR = true;
+          prDiff = Number((todayMaxWeight - previousMax).toFixed(1));
+        }
+
+        return {
+          name: ex.name,
+          sets: ex.sets,
+          todayMaxWeight: todayMaxWeight,
+          avgWeight: avgWeight,
+          previousMax: previousMax,
+          isPR: isPR,
+          prDiff: prDiff,
+          isFirstRecord: isFirstRecord
+        };
+      });
+
+      state.workouts.unshift(finishedWorkout);
+      saveWorkouts();
+
+      state.activeSession = null;
+      saveActiveSession();
+      resetStopwatchToZero(false);
+
+      state.lastFinishedResult = {
+        workout: finishedWorkout,
+        breakdown: resultBreakdown
+      };
+
+      switchView('result');
+    }
+
+    /**
+     * ============================================================================
+     * 13. 本日の結果画面描画（全体総挙上重量・全体平均回数は非表示）
+     * ============================================================================
+     */
+    function renderResultScreen() {
+      if (!state.lastFinishedResult) {
+        switchView('home');
+        return;
+      }
+
+      var workout = state.lastFinishedResult.workout;
+      var breakdown = state.lastFinishedResult.breakdown;
+
+      var dtEl = $id('resultDateTime');
+      var gymEl = $id('resultGymName');
+      var prCountEl = $id('resultPrCount');
+
+      if (dtEl) dtEl.textContent = '🗓️ ' + formatDisplayDateTime(workout.dateTime);
+      if (gymEl) gymEl.textContent = '📍 ' + workout.gymName;
+
+      var prCount = breakdown.filter(function (item) { return item.isPR; }).length;
+      if (prCountEl) prCountEl.textContent = '記録更新（PR）達成: ' + prCount + '種目';
+
+      var listContainer = $id('resultExercisesList');
+      if (!listContainer) return;
+      listContainer.innerHTML = '';
+
+      breakdown.forEach(function (item) {
+        var card = document.createElement('div');
+        card.className = item.isPR
+          ? 'rounded-3xl app-card border-2 border-[#f59e0b] p-4 sm:p-5 space-y-3 pr-badge-glow'
+          : 'rounded-3xl app-card border p-4 sm:p-5 space-y-3';
+
+        var prBadgeHtml = '';
+        if (item.isPR) {
+          if (item.isFirstRecord) {
+            prBadgeHtml =
+              '<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#f59e0b] text-slate-950 font-extrabold text-xs shadow-md">' +
+                '✨ 初記録達成！' +
+              '</span>';
+          } else {
+            prBadgeHtml =
+              '<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#f59e0b] text-slate-950 font-extrabold text-xs shadow-md">' +
+                '🏆 NEW RECORD・記録更新！ +' + item.prDiff + 'kg UP' +
+              '</span>';
+          }
+        }
+
+        var setsChips = item.sets.map(function (s, idx) {
+          return '<span class="font-mono-num text-xs app-subcard border text-slate-200 px-2.5 py-1 rounded-lg">' + (idx + 1) + 'セット目: ' + s.weight + 'kg × ' + s.reps + '回</span>';
+        }).join(' ');
+
+        var prevMaxHtml = item.previousMax !== null
+          ? '<div class="text-[11px] text-slate-400 mt-0.5">前回までの最高: ' + item.previousMax + 'kg</div>'
+          : '';
+
+        card.innerHTML =
+          '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+            '<h3 class="text-lg font-extrabold text-white">' + escapeHtml(item.name) + '</h3>' +
+            prBadgeHtml +
+          '</div>' +
+          '<div class="grid grid-cols-2 gap-3 pt-1">' +
+            '<div class="rounded-2xl app-subcard border p-3.5">' +
+              '<div class="text-xs text-slate-400 font-bold">最大重量 (kg)</div>' +
+              '<div class="font-mono-num text-xl sm:text-2xl font-extrabold ' + (item.isPR ? 'text-[#f59e0b]' : 'text-[#10b981]') + ' mt-0.5">' +
+                item.todayMaxWeight + '<span class="text-xs font-normal ml-0.5">kg</span>' +
+              '</div>' +
+              prevMaxHtml +
+            '</div>' +
+            '<div class="rounded-2xl app-subcard border p-3.5">' +
+              '<div class="text-xs text-slate-400 font-bold">平均重量 (kg)</div>' +
+              '<div class="font-mono-num text-xl sm:text-2xl font-extrabold text-white mt-0.5">' +
+                item.avgWeight.toFixed(1) + '<span class="text-xs font-normal ml-0.5">kg</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="flex flex-wrap gap-1.5 pt-1">' + setsChips + '</div>';
+
+        listContainer.appendChild(card);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * 14. 共通Excelワークブック生成（2シート構成: 種目別サマリー / セット詳細）
+     * ============================================================================
+     */
+    function buildExcelWorkbookFromWorkouts(targetWorkouts, exerciseFilterName) {
+      var allAsc = state.workouts.slice().sort(function (a, b) {
+        return (a.dateTime || '').localeCompare(b.dateTime || '');
+      });
+      var prLookupMap = new Map();
+      var runningMaxMap = new Map();
+
+      allAsc.forEach(function (wk) {
+        (wk.exercises || []).forEach(function (ex) {
+          var canonical = normalizeExerciseName(ex.name);
+          var sets = ex.sets || [];
+          if (!canonical || sets.length === 0) return;
+
+          var maxW = Math.max.apply(null, sets.map(function (s) { return Number(s.weight) || 0; }));
+          var prevMax = runningMaxMap.has(canonical) ? runningMaxMap.get(canonical) : null;
+          var label = '-';
+
+          if (prevMax === null && maxW > 0) {
+            label = 'NEW RECORD（初記録）';
+            runningMaxMap.set(canonical, maxW);
+          } else if (prevMax !== null && maxW > prevMax) {
+            label = 'NEW RECORD（+' + Number((maxW - prevMax).toFixed(1)) + 'kg）';
+            runningMaxMap.set(canonical, maxW);
+          } else if (prevMax === null) {
+            runningMaxMap.set(canonical, maxW);
+          }
+          prLookupMap.set(wk.id + '__' + canonical, label);
+        });
+      });
+
+      var sortedTargets = targetWorkouts.slice().sort(function (a, b) {
+        return (b.dateTime || '').localeCompare(a.dateTime || '');
+      });
+
+      var summaryRows = [];
+      var detailRows = [];
+
+      sortedTargets.forEach(function (wk) {
+        var dateStr = formatDisplayDateTime(wk.dateTime);
+        var gymStr = wk.gymName || 'ジム名未設定';
+        var sessionId = wk.id || ('wk_' + Date.now());
+
+        (wk.exercises || []).forEach(function (ex) {
+          var canonical = normalizeExerciseName(ex.name);
+          if (!canonical || !ex.sets || ex.sets.length === 0) return;
+          if (exerciseFilterName && canonical !== exerciseFilterName) return;
+
+          var weights = ex.sets.map(function (s) { return Number(s.weight) || 0; });
+          var maxW = Math.max.apply(null, weights);
+          var avgW = weights.reduce(function (a, b) { return a + b; }, 0) / weights.length;
+          var prLabel = prLookupMap.get(sessionId + '__' + canonical) || '-';
+
+          summaryRows.push({
+            '実施日時': dateStr,
+            'トレーニング場所': gymStr,
+            '種目名': canonical,
+            'セット数': ex.sets.length,
+            '最大重量(kg)': maxW,
+            '平均重量(kg)': Number(avgW.toFixed(1)),
+            '記録更新': prLabel
+          });
+
+          ex.sets.forEach(function (s, idx) {
+            detailRows.push({
+              '実施日時': dateStr,
+              'トレーニング場所': gymStr,
+              '種目名': canonical,
+              'セット番号': idx + 1,
+              '重量(kg)': Number(s.weight) || 0,
+              '回数': Number(s.reps) || 0,
+              'セッションID': sessionId
+            });
+          });
+        });
+      });
+
+      return { summaryRows: summaryRows, detailRows: detailRows };
+    }
+
+    function writeExcelFileWithRows(summaryRows, detailRows, filenameBase) {
+      if (typeof XLSX === 'undefined') {
+        showToast('Excelライブラリの読み込み中です。数秒後にもう一度お試しください。', 'warning');
+        return false;
+      }
+
+      var wb = XLSX.utils.book_new();
+      var wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      var wsDetail = XLSX.utils.json_to_sheet(detailRows);
+
+      wsSummary['!cols'] = [
+        { wch: 18 }, { wch: 22 }, { wch: 26 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 24 }
+      ];
+      wsDetail['!cols'] = [
+        { wch: 18 }, { wch: 22 }, { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 22 }
+      ];
+
+      XLSX.utils.book_append_sheet(wb, wsSummary, '種目別サマリー');
+      XLSX.utils.book_append_sheet(wb, wsDetail, 'セット詳細');
+
+      XLSX.writeFile(wb, filenameBase + '.xlsx');
+      return true;
+    }
+
+    function exportAllHistoryToExcel() {
+      if (!state.workouts || state.workouts.length === 0) {
+        showToast('出力できる記録データがありません', 'warning');
+        return;
+      }
+      var built = buildExcelWorkbookFromWorkouts(state.workouts, '');
+      var todayStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      if (writeExcelFileWithRows(built.summaryRows, built.detailRows, 'workout_all_' + todayStamp)) {
+        showToast('全データExcel（workout_all_' + todayStamp + '.xlsx）を出力しました', 'success');
+      }
+    }
+
+    function exportResultToExcel() {
+      if (!state.lastFinishedResult || !state.lastFinishedResult.workout) {
+        showToast('出力するワークアウト結果がありません', 'warning');
+        return;
+      }
+      var wk = state.lastFinishedResult.workout;
+      var built = buildExcelWorkbookFromWorkouts([wk], '');
+      var fileDate = (wk.dateTime || '').slice(0, 10).replace(/-/g, '') || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      if (writeExcelFileWithRows(built.summaryRows, built.detailRows, 'workout_result_' + fileDate)) {
+        showToast('本日の結果をExcel出力しました', 'success');
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 15. 範囲指定Excel出力モーダル制御
+     * ============================================================================
+     */
+    function openRangeExportModal() {
+      var modal = $id('rangeExportModal');
+      var exSelect = $id('exportExerciseFilter');
+
+      if (exSelect) {
+        var statsMap = calculateExerciseStatsMap();
+        var names = Array.from(statsMap.keys()).sort();
+        var opts = '<option value="">すべての種目</option>';
+        names.forEach(function (n) {
+          opts += '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>';
+        });
+        exSelect.innerHTML = opts;
+      }
+
+      applyRangePreset('all');
+      setElementVisible(modal, true, 'flex');
+    }
+
+    function applyRangePreset(presetKey) {
+      var startInput = $id('exportStartDate');
+      var endInput = $id('exportEndDate');
+      if (!startInput || !endInput) return;
+
+      var now = new Date();
+      var startStr = '';
+      var endStr = '';
+
+      if (presetKey === 'thisMonth') {
+        startStr = formatDateInputVal(new Date(now.getFullYear(), now.getMonth(), 1));
+        endStr = formatDateInputVal(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      } else if (presetKey === 'lastMonth') {
+        startStr = formatDateInputVal(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+        endStr = formatDateInputVal(new Date(now.getFullYear(), now.getMonth(), 0));
+      } else if (presetKey === 'last3Months') {
+        startStr = formatDateInputVal(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
+        endStr = formatDateInputVal(now);
+      } else if (presetKey === 'thisYear') {
+        startStr = formatDateInputVal(new Date(now.getFullYear(), 0, 1));
+        endStr = formatDateInputVal(new Date(now.getFullYear(), 11, 31));
+      } else {
+        startStr = '';
+        endStr = '';
+      }
+
+      startInput.value = startStr;
+      endInput.value = endStr;
+
+      document.querySelectorAll('.range-preset-btn').forEach(function (btn) {
+        var isCurrent = btn.getAttribute('data-range-preset') === presetKey;
+        btn.className = isCurrent
+          ? 'range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#38bdf8] border border-[#38bdf8] text-xs font-extrabold text-slate-950 transition cursor-pointer'
+          : 'range-preset-btn min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0b0f19] hover:bg-slate-900 border border-[#23304a] text-xs font-bold text-slate-200 transition cursor-pointer';
+      });
+
+      updateRangeExportPreview();
+    }
+
+    function getFilteredWorkoutsForRange() {
+      var startInput = $id('exportStartDate');
+      var endInput = $id('exportEndDate');
+      var exSelect = $id('exportExerciseFilter');
+
+      var startDate = startInput ? startInput.value : '';
+      var endDate = endInput ? endInput.value : '';
+      var exFilter = exSelect ? exSelect.value : '';
+
+      var matchedWorkouts = [];
+      var totalSets = 0;
+
+      state.workouts.forEach(function (wk) {
+        var wkDateOnly = extractIsoDateOnly(wk.dateTime);
+        if (startDate && wkDateOnly < startDate) return;
+        if (endDate && wkDateOnly > endDate) return;
+
+        var filteredExercises = (wk.exercises || []).filter(function (ex) {
+          var canonical = normalizeExerciseName(ex.name);
+          if (!canonical || !ex.sets || ex.sets.length === 0) return false;
+          if (exFilter && canonical !== exFilter) return false;
+          return true;
+        });
+
+        if (filteredExercises.length > 0) {
+          matchedWorkouts.push({
+            id: wk.id,
+            dateTime: wk.dateTime,
+            gymName: wk.gymName,
+            exercises: filteredExercises
+          });
+          filteredExercises.forEach(function (ex) {
+            totalSets += ex.sets.length;
+          });
+        }
+      });
+
+      return {
+        workouts: matchedWorkouts,
+        totalSets: totalSets,
+        startDate: startDate,
+        endDate: endDate,
+        exFilter: exFilter
+      };
+    }
+
+    function updateRangeExportPreview() {
+      var res = getFilteredWorkoutsForRange();
+      var summaryEl = $id('rangePreviewSummary');
+      var confirmBtn = $id('confirmRangeExportBtn');
+
+      if (summaryEl) {
+        summaryEl.textContent = '対象ワークアウト: ' + res.workouts.length + '件 / 合計セット数: ' + res.totalSets + 'セット';
+      }
+      if (confirmBtn) {
+        confirmBtn.disabled = res.workouts.length === 0;
+        confirmBtn.className = res.workouts.length === 0
+          ? 'min-h-[48px] px-4 py-2.5 rounded-2xl bg-slate-700 text-slate-500 font-extrabold text-sm cursor-not-allowed'
+          : 'min-h-[48px] px-4 py-2.5 rounded-2xl bg-[#10b981] hover:bg-emerald-400 text-slate-950 font-extrabold text-sm shadow-md transition cursor-pointer';
+      }
+    }
+
+    function executeRangeExport() {
+      var res = getFilteredWorkoutsForRange();
+      if (res.workouts.length === 0) {
+        showToast('指定条件に一致する記録がありません', 'warning');
+        return;
+      }
+
+      var built = buildExcelWorkbookFromWorkouts(res.workouts, res.exFilter);
+      var sTag = res.startDate ? res.startDate.replace(/-/g, '') : 'start';
+      var eTag = res.endDate ? res.endDate.replace(/-/g, '') : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      var filename = 'workout_range_' + sTag + '_' + eTag;
+
+      if (writeExcelFileWithRows(built.summaryRows, built.detailRows, filename)) {
+        setElementVisible($id('rangeExportModal'), false);
+        showToast('指定範囲のExcel（' + filename + '.xlsx）を出力しました', 'success');
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 16. Excelデータインポート（引き継ぎ）モーダル制御
+     * ============================================================================
+     */
+    function openExcelImportModal() {
+      state.parsedImportWorkouts = [];
+      var fileInput = $id('excelImportFileInput');
+      var fileNameEl = $id('importSelectedFileName');
+      var previewBox = $id('importPreviewBox');
+      var mergeBtn = $id('importMergeBtn');
+      var overwriteBtn = $id('importOverwriteBtn');
+
+      if (fileInput) fileInput.value = '';
+      if (fileNameEl) fileNameEl.textContent = 'タップしてExcelファイル（.xlsx / .xls）を選択';
+      setElementVisible(previewBox, false);
+      if (mergeBtn) mergeBtn.disabled = true;
+      if (overwriteBtn) overwriteBtn.disabled = true;
+
+      setElementVisible($id('excelImportModal'), true, 'flex');
+    }
+
+    function handleExcelImportFileSelected(file) {
+      if (!file) return;
+      if (typeof XLSX === 'undefined') {
+        showToast('Excel解析ライブラリの読み込み中です。少々お待ちください。', 'warning');
+        return;
+      }
+
+      var fileNameEl = $id('importSelectedFileName');
+      if (fileNameEl) fileNameEl.textContent = '選択中: ' + file.name;
+
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          var data = new Uint8Array(e.target.result);
+          var wb = XLSX.read(data, { type: 'array' });
+
+          var parsedWorkouts = [];
+
+          if (wb.Sheets['セット詳細']) {
+            var detailRows = XLSX.utils.sheet_to_json(wb.Sheets['セット詳細'], { defval: '' });
+            parsedWorkouts = parseDetailRowsToWorkouts(detailRows);
+          } else if (wb.Sheets['種目別サマリー']) {
+            var summaryRows = XLSX.utils.sheet_to_json(wb.Sheets['種目別サマリー'], { defval: '' });
+            parsedWorkouts = parseSummaryRowsFallbackToWorkouts(summaryRows);
+          } else if (wb.SheetNames.length > 0) {
+            var firstRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+            parsedWorkouts = parseDetailRowsToWorkouts(firstRows);
+          }
+
+          if (!parsedWorkouts || parsedWorkouts.length === 0) {
+            throw new Error('有効なワークアウトデータが見つかりませんでした');
+          }
+
+          state.parsedImportWorkouts = parsedWorkouts;
+
+          var totalSets = 0;
+          var uniqueExercises = new Set();
+          var minDate = '';
+          var maxDate = '';
+
+          parsedWorkouts.forEach(function (wk) {
+            var dShort = formatShortDate(wk.dateTime);
+            if (!minDate || dShort < minDate) minDate = dShort;
+            if (!maxDate || dShort > maxDate) maxDate = dShort;
+
+            (wk.exercises || []).forEach(function (ex) {
+              uniqueExercises.add(ex.name);
+              totalSets += (ex.sets || []).length;
+            });
+          });
+
+          var previewBox = $id('importPreviewBox');
+          var rangeEl = $id('importPreviewDateRange');
+          var wkCountEl = $id('importPreviewWorkoutCount');
+          var exCountEl = $id('importPreviewExerciseCount');
+          var setCountEl = $id('importPreviewSetCount');
+          var mergeBtn = $id('importMergeBtn');
+          var overwriteBtn = $id('importOverwriteBtn');
+
+          if (rangeEl) rangeEl.textContent = minDate + ' 〜 ' + maxDate;
+          if (wkCountEl) wkCountEl.textContent = parsedWorkouts.length + '件';
+          if (exCountEl) exCountEl.textContent = uniqueExercises.size + '種目';
+          if (setCountEl) setCountEl.textContent = totalSets + 'セット';
+
+          setElementVisible(previewBox, true, 'block');
+          if (mergeBtn) mergeBtn.disabled = false;
+          if (overwriteBtn) overwriteBtn.disabled = false;
+        } catch (err) {
+          state.parsedImportWorkouts = [];
+          setElementVisible($id('importPreviewBox'), false);
+          if ($id('importMergeBtn')) $id('importMergeBtn').disabled = true;
+          if ($id('importOverwriteBtn')) $id('importOverwriteBtn').disabled = true;
+          showToast('Excelファイルの解析に失敗しました。本アプリで出力した.xlsxファイルか確認してください。', 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function parseDetailRowsToWorkouts(rows) {
+      var sessionMap = new Map();
+
+      rows.forEach(function (row, rowIdx) {
+        var rawDate = row['実施日時'] || row['日付'] || row['日時'] || '';
+        var rawGym = row['トレーニング場所'] || row['ジム名'] || row['場所'] || '';
+        var rawEx = row['種目名'] || row['種目'] || '';
+        var rawSetNo = row['セット番号'] !== undefined && row['セット番号'] !== '' ? Number(row['セット番号']) : (rowIdx + 1);
+        var rawWeight = row['重量(kg)'] !== undefined && row['重量(kg)'] !== '' ? Number(row['重量(kg)']) : Number(row['重量'] || 0);
+        var rawReps = row['回数'] !== undefined && row['回数'] !== '' ? Number(row['回数']) : 0;
+        var rawSessionId = row['セッションID'] ? String(row['セッションID']).trim() : '';
+
+        var canonicalEx = normalizeExerciseName(rawEx);
+        if (!canonicalEx) return;
+
+        var normDateTime = normalizeImportedDateTime(rawDate);
+        var gymName = String(rawGym || '').trim() || 'ジム名未設定';
+        var groupKey = rawSessionId || (normDateTime + '__' + gymName);
+
+        if (!sessionMap.has(groupKey)) {
+          sessionMap.set(groupKey, {
+            id: rawSessionId || ('wk_imp_' + Date.now() + '_' + sessionMap.size),
+            dateTime: normDateTime,
+            gymName: gymName,
+            exerciseMap: new Map()
+          });
+        }
+
+        var sessionObj = sessionMap.get(groupKey);
+        if (!sessionObj.exerciseMap.has(canonicalEx)) {
+          sessionObj.exerciseMap.set(canonicalEx, []);
+        }
+        sessionObj.exerciseMap.get(canonicalEx).push({
+          setNo: isNaN(rawSetNo) ? 999 : rawSetNo,
+          weight: isNaN(rawWeight) ? 0 : rawWeight,
+          reps: isNaN(rawReps) ? 0 : rawReps
+        });
+      });
+
+      var result = [];
+      sessionMap.forEach(function (sess) {
+        var exercises = [];
+        sess.exerciseMap.forEach(function (setItems, exName) {
+          setItems.sort(function (a, b) { return a.setNo - b.setNo; });
+          exercises.push({
+            name: exName,
+            sets: setItems.map(function (s) { return { weight: s.weight, reps: s.reps }; })
+          });
+        });
+        if (exercises.length > 0) {
+          result.push({
+            id: sess.id,
+            dateTime: sess.dateTime,
+            gymName: sess.gymName,
+            exercises: exercises
+          });
+        }
+      });
+
+      result.sort(function (a, b) {
+        return (b.dateTime || '').localeCompare(a.dateTime || '');
+      });
+      return result;
+    }
+
+    function parseSummaryRowsFallbackToWorkouts(rows) {
+      var sessionMap = new Map();
+
+      rows.forEach(function (row) {
+        var rawDate = row['実施日時'] || row['日付'] || '';
+        var rawGym = row['トレーニング場所'] || row['ジム名'] || '';
+        var canonicalEx = normalizeExerciseName(row['種目名'] || '');
+        var maxW = Number(row['最大重量(kg)'] || 0);
+        var setCount = Math.max(1, Number(row['セット数'] || 1));
+
+        if (!canonicalEx) return;
+        var normDateTime = normalizeImportedDateTime(rawDate);
+        var gymName = String(rawGym || '').trim() || 'ジム名未設定';
+        var groupKey = normDateTime + '__' + gymName;
+
+        if (!sessionMap.has(groupKey)) {
+          sessionMap.set(groupKey, {
+            id: 'wk_imp_' + Date.now() + '_' + sessionMap.size,
+            dateTime: normDateTime,
+            gymName: gymName,
+            exercises: []
+          });
+        }
+
+        var sets = [];
+        for (var i = 0; i < setCount; i++) {
+          sets.push({ weight: isNaN(maxW) ? 0 : maxW, reps: 1 });
+        }
+        sessionMap.get(groupKey).exercises.push({ name: canonicalEx, sets: sets });
+      });
+
+      return Array.from(sessionMap.values()).sort(function (a, b) {
+        return (b.dateTime || '').localeCompare(a.dateTime || '');
+      });
+    }
+
+    function createWorkoutSignature(wk) {
+      var exSig = (wk.exercises || []).map(function (ex) {
+        var sSig = (ex.sets || []).map(function (s) { return s.weight + 'x' + s.reps; }).join(',');
+        return normalizeExerciseName(ex.name) + ':' + sSig;
+      }).join('|');
+      return (wk.dateTime || '') + '__' + (wk.gymName || '') + '__' + exSig;
+    }
+
+    async function executeExcelImport(mode) {
+      var imported = state.parsedImportWorkouts || [];
+      if (imported.length === 0) return;
+
+      if (mode === 'overwrite') {
+        if (state.workouts.length > 0) {
+          var ok = await showConfirmModal(
+            '上書き復元の確認',
+            '現在のデータ（' + state.workouts.length + '件）をすべて置き換えて、Excelの' + imported.length + '件で上書き復元しますか？',
+            '上書きして復元',
+            true
+          );
+          if (!ok) return;
+        }
+
+        state.workouts = imported.slice();
+        syncAuxiliaryHistoriesFromWorkouts(state.workouts);
+        persistAllToStorage();
+        setElementVisible($id('excelImportModal'), false);
+        renderHomeScreen();
+        showToast(imported.length + '件のワークアウトデータで上書き復元しました', 'success');
+      } else {
+        var existingIds = new Set(state.workouts.map(function (w) { return w.id; }));
+        var existingSigs = new Set(state.workouts.map(createWorkoutSignature));
+
+        var addedCount = 0;
+        var skippedCount = 0;
+
+        imported.forEach(function (impWk) {
+          var sig = createWorkoutSignature(impWk);
+          if ((impWk.id && existingIds.has(impWk.id)) || existingSigs.has(sig)) {
+            skippedCount += 1;
+            return;
+          }
+          state.workouts.push(impWk);
+          if (impWk.id) existingIds.add(impWk.id);
+          existingSigs.add(sig);
+          addedCount += 1;
+        });
+
+        state.workouts.sort(function (a, b) {
+          return (b.dateTime || '').localeCompare(a.dateTime || '');
+        });
+
+        syncAuxiliaryHistoriesFromWorkouts(state.workouts);
+        persistAllToStorage();
+        setElementVisible($id('excelImportModal'), false);
+        renderHomeScreen();
+
+        if (addedCount > 0) {
+          showToast(addedCount + '件を追加しました' + (skippedCount > 0 ? '（重複 ' + skippedCount + '件スキップ）' : ''), 'success');
+        } else {
+          showToast('すべて登録済みのデータでした（重複 ' + skippedCount + '件スキップ）', 'info');
+        }
+      }
+    }
+
+    function syncAuxiliaryHistoriesFromWorkouts(workoutsList) {
+      var masterSet = new Set(MASTER_EXERCISES.map(function (m) { return m.name; }));
+      var gymSet = new Set(state.gymHistory);
+      var customSet = new Set(state.customExercises);
+
+      workoutsList.forEach(function (wk) {
+        if (wk.gymName && wk.gymName !== 'ジム名未設定') {
+          gymSet.add(wk.gymName);
+        }
+        (wk.exercises || []).forEach(function (ex) {
+          var c = normalizeExerciseName(ex.name);
+          if (c && !masterSet.has(c)) {
+            customSet.add(c);
+          }
+        });
+      });
+
+      state.gymHistory = Array.from(gymSet).slice(0, 15);
+      state.customExercises = Array.from(customSet).slice(0, 50);
+    }
+
+    /**
+     * ============================================================================
+     * 17. アプリ初期化＆全イベントリスナーバインド
+     * ============================================================================
+     */
+    var isAppInitialized = false;
+
+    function initApp() {
+      if (isAppInitialized) return;
+      isAppInitialized = true;
+
+      try { loadAllFromStorage(); } catch (e) {}
+      try { populateWeightAndRepDropdowns(); } catch (e) {}
+      try { renderHomeScreen(); } catch (e) {}
+
+      // ヘッダーロゴ押下時（記録画面表示中なら同じ安全戻り判定を実行）
+      var headerLogoBtn = $id('headerLogoBtn');
+      if (headerLogoBtn) {
+        headerLogoBtn.addEventListener('click', function () {
+          var workoutView = $id('workoutView');
+          if (workoutView && workoutView.style.display !== 'none') {
+            handleWorkoutBackAction();
+          } else {
+            switchView('home');
+          }
+        });
+      }
+
+      // 記録画面「← 戻る」ボタン＆専用3択モーダルボタン
+      var workoutBackBtn = $id('workoutBackBtn');
+      if (workoutBackBtn) {
+        workoutBackBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          handleWorkoutBackAction();
+        });
+      }
+      if ($id('backPauseWorkoutBtn')) {
+        $id('backPauseWorkoutBtn').addEventListener('click', handlePauseWorkoutAndGoHome);
+      }
+      if ($id('backDiscardWorkoutBtn')) {
+        $id('backDiscardWorkoutBtn').addEventListener('click', handleDiscardWorkoutAndGoHome);
+      }
+      if ($id('backCancelModalBtn')) {
+        $id('backCancelModalBtn').addEventListener('click', function () {
+          setElementVisible($id('workoutBackModal'), false);
+        });
+      }
+      if ($id('closeWorkoutBackModalXBtn')) {
+        $id('closeWorkoutBackModalXBtn').addEventListener('click', function () {
+          setElementVisible($id('workoutBackModal'), false);
+        });
+      }
+
+      // ワークアウト開始・再開・破棄
+      var startWorkoutBtn = $id('startWorkoutBtn');
+      if (startWorkoutBtn) {
+        startWorkoutBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          startNewWorkout();
+        });
+      }
+
+      var resumeWorkoutBtn = $id('resumeWorkoutBtn');
+      if (resumeWorkoutBtn) {
+        resumeWorkoutBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          resumeExistingWorkout();
+        });
+      }
+
+      var discardDraftBtn = $id('discardDraftBtn');
+      if (discardDraftBtn) {
+        discardDraftBtn.addEventListener('click', async function () {
+          var ok = await showConfirmModal(
+            '進行中ワークアウトの破棄',
+            '保存されている未完了のワークアウトを破棄しますか？',
+            '破棄する',
+            true
+          );
+          if (ok) {
+            state.activeSession = null;
+            saveActiveSession();
+            renderHomeScreen();
+            showToast('進行中のデータを破棄しました', 'info');
+          }
+        });
+      }
+
+      // ホーム種目検索フィルター
+      var homeFilterInput = $id('homeExerciseFilterInput');
+      if (homeFilterInput) {
+        homeFilterInput.addEventListener('input', function () {
+          renderHomeScreen();
+        });
+      }
+
+      // ストップウォッチ（開始・繰り返し・停止の3ボタンのみ）
+      if ($id('swStartBtn')) $id('swStartBtn').addEventListener('click', startStopwatch);
+      if ($id('swRepeatBtn')) $id('swRepeatBtn').addEventListener('click', repeatStopwatch);
+      if ($id('swStopBtn')) $id('swStopBtn').addEventListener('click', stopStopwatch);
+
+      // 日時・ジム名入力と確定非表示
+      var dtInput = $id('workoutDateTimeInput');
+      if (dtInput) {
+        dtInput.addEventListener('change', function (e) {
+          if (state.activeSession) {
+            state.activeSession.dateTime = e.target.value;
+            saveActiveSession();
+          }
+        });
+      }
+
+      var gymInput = $id('gymNameInput');
+      if (gymInput) {
+        gymInput.addEventListener('input', function (e) {
+          if (state.activeSession) {
+            state.activeSession.gymName = e.target.value;
+            saveActiveSession();
+          }
+        });
+        gymInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            confirmSessionLocation(false);
+          }
+        });
+      }
+
+      if ($id('confirmLocationBtn')) {
+        $id('confirmLocationBtn').addEventListener('click', function () {
+          confirmSessionLocation(false);
+        });
+      }
+      if ($id('refreshLocationBtn')) {
+        $id('refreshLocationBtn').addEventListener('click', detectCurrentLocationGym);
+      }
+
+      // 種目入力・予測変換・定番タグ
+      var exerciseInput = $id('exerciseNameInput');
+      if (exerciseInput) {
+        exerciseInput.addEventListener('input', function (e) {
+          var val = e.target.value;
+          if (state.activeSession) {
+            state.activeSession.currentExerciseName = val;
+            saveActiveSession();
+          }
+          renderExerciseAutocomplete(val);
+          updatePreviousRecordsPanel(val);
+        });
+
+        exerciseInput.addEventListener('focus', function (e) {
+          if (e.target.value.trim()) {
+            renderExerciseAutocomplete(e.target.value);
+          }
+        });
+
+        document.addEventListener('click', function (e) {
+          var dropdown = $id('exerciseAutocompleteDropdown');
+          if (dropdown && !exerciseInput.contains(e.target) && !dropdown.contains(e.target)) {
+            setElementVisible(dropdown, false);
+          }
+        });
+      }
+
+      if ($id('clearExerciseInputBtn')) {
+        $id('clearExerciseInputBtn').addEventListener('click', function () {
+          if (exerciseInput) exerciseInput.value = '';
+          if (state.activeSession) {
+            state.activeSession.currentExerciseName = '';
+            saveActiveSession();
+          }
+          updatePreviousRecordsPanel('');
+          if (exerciseInput) exerciseInput.focus();
+        });
+      }
+
+      document.querySelectorAll('.quick-ex-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          selectExerciseName(btn.getAttribute('data-quick-ex'));
+        });
+      });
+
+      // セット追加・次の種目へ・ワークアウト終了
+      if ($id('addSetBtn')) $id('addSetBtn').addEventListener('click', handleAddSet);
+      if ($id('nextExerciseBtn')) $id('nextExerciseBtn').addEventListener('click', handleNextExercise);
+      if ($id('finishWorkoutBtn')) $id('finishWorkoutBtn').addEventListener('click', handleFinishWorkout);
+
+      // リザルト画面ボタン
+      if ($id('exportResultExcelBtn')) $id('exportResultExcelBtn').addEventListener('click', exportResultToExcel);
+      if ($id('backToHomeFromResultBtn')) {
+        $id('backToHomeFromResultBtn').addEventListener('click', function () {
+          switchView('home');
+        });
+      }
+
+      // ホーム画面：全データExcel出力
+      if ($id('exportAllExcelBtn')) {
+        $id('exportAllExcelBtn').addEventListener('click', exportAllHistoryToExcel);
+      }
+
+      // ホーム画面：範囲指定Excel出力モーダル制御
+      if ($id('openRangeExportModalBtn')) {
+        $id('openRangeExportModalBtn').addEventListener('click', openRangeExportModal);
+      }
+      if ($id('closeRangeExportModalBtn')) {
+        $id('closeRangeExportModalBtn').addEventListener('click', function () {
+          setElementVisible($id('rangeExportModal'), false);
+        });
+      }
+      if ($id('cancelRangeExportBtn')) {
+        $id('cancelRangeExportBtn').addEventListener('click', function () {
+          setElementVisible($id('rangeExportModal'), false);
+        });
+      }
+      document.querySelectorAll('.range-preset-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          applyRangePreset(btn.getAttribute('data-range-preset'));
+        });
+      });
+      if ($id('exportStartDate')) $id('exportStartDate').addEventListener('change', updateRangeExportPreview);
+      if ($id('exportEndDate')) $id('exportEndDate').addEventListener('change', updateRangeExportPreview);
+      if ($id('exportExerciseFilter')) $id('exportExerciseFilter').addEventListener('change', updateRangeExportPreview);
+      if ($id('confirmRangeExportBtn')) $id('confirmRangeExportBtn').addEventListener('click', executeRangeExport);
+
+      // ホーム画面：Excelデータインポート（引き継ぎ）モーダル制御
+      if ($id('openExcelImportModalBtn')) {
+        $id('openExcelImportModalBtn').addEventListener('click', openExcelImportModal);
+      }
+      if ($id('closeExcelImportModalBtn')) {
+        $id('closeExcelImportModalBtn').addEventListener('click', function () {
+          setElementVisible($id('excelImportModal'), false);
+        });
+      }
+      if ($id('cancelExcelImportBtn')) {
+        $id('cancelExcelImportBtn').addEventListener('click', function () {
+          setElementVisible($id('excelImportModal'), false);
+        });
+      }
+      var excelImportFileInput = $id('excelImportFileInput');
+      if (excelImportFileInput) {
+        excelImportFileInput.addEventListener('change', function (e) {
+          if (e.target.files && e.target.files[0]) {
+            handleExcelImportFileSelected(e.target.files[0]);
+          }
+        });
+      }
+      if ($id('importMergeBtn')) {
+        $id('importMergeBtn').addEventListener('click', function () {
+          executeExcelImport('merge');
+        });
+      }
+      if ($id('importOverwriteBtn')) {
+        $id('importOverwriteBtn').addEventListener('click', function () {
+          executeExcelImport('overwrite');
+        });
+      }
+
+      // ヘッダー右上：データ初期化
+      if ($id('resetAllDataBtn')) {
+        $id('resetAllDataBtn').addEventListener('click', async function () {
+          var ok = await showConfirmModal(
+            'データ初期化の確認',
+            '本当にすべてのデータを消去しますか？これまでのワークアウト履歴・カスタム種目・進行中データのすべてが削除されます。',
+            'データ初期化を実行',
+            true
+          );
+          if (ok) {
+            safeRemoveStorage(STORAGE_KEY);
+            state.workouts = [];
+            state.customExercises = [];
+            state.gymHistory = [];
+            state.activeSession = null;
+            state.expandedBig4 = {};
+            switchView('home');
+            showToast('すべてのデータを初期化しました', 'info');
+          }
+        });
+      }
+
+      window.addEventListener('beforeunload', function () {
+        if (state.activeSession) {
+          saveActiveSession();
+        }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+  </script>
+</body>
+</html>
